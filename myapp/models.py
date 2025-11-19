@@ -16,15 +16,18 @@ class BotSubmission(models.Model):
     detection_tags = FlexibleArrayField(blank=True)
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=['-created_at']),
-            models.Index(fields=['ip_address']),
-            models.Index(fields=['email_submitted']),
+            models.Index(fields=["-created_at"], name="myapp_botsub_created_idx"),
+            models.Index(fields=["ip_address"], name="myapp_botsub_ip_idx"),
+            models.Index(
+                fields=["email_submitted"],
+                name="myapp_botsub_email_idx",
+            ),
         ]
 
     def __str__(self) -> str:
-        return f'{self.email_submitted or "unknown"} @ {self.ip_address}'
+        return f"{self.email_submitted or 'unknown'} @ {self.ip_address}"
 
     def save(self, *args, **kwargs):
         tags = [tag for tag in (self.detection_tags or []) if tag]
@@ -33,10 +36,14 @@ class BotSubmission(models.Model):
 
     @property
     def is_honeypot(self) -> bool:
-        return 'honeypot-hit' in (self.detection_tags or [])
+        return "honeypot-hit" in (self.detection_tags or [])
 
     @property
     def email_preview(self) -> str:
         if not self.email_submitted:
-            return ''
-        return (self.email_submitted[:48] + '…') if len(self.email_submitted) > 48 else self.email_submitted
+            return ""
+        return (
+            (self.email_submitted[:48] + "…")
+            if len(self.email_submitted) > 48
+            else self.email_submitted
+        )

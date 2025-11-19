@@ -28,9 +28,9 @@ class Migration(migrations.Migration):
             options={
                 'ordering': ['-created_at'],
                 'indexes': [
-                    models.Index(fields=['-created_at']),
-                    models.Index(fields=['ip_address']),
-                    models.Index(fields=['email_submitted']),
+                    models.Index(fields=['-created_at'], name='myapp_botsub_created_idx'),
+                    models.Index(fields=['ip_address'], name='myapp_botsub_ip_idx'),
+                    models.Index(fields=['email_submitted'], name='myapp_botsub_email_idx'),
                 ],
             },
         ),

@@ -19,7 +19,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ENV Setup
 env = environ.Env()
-environ.Env.read_env(os.path.join(BASE_DIR / "envs", ".env.dev"))
+environ.Env.read_env(os.path.join(BASE_DIR / ".envs" / ".local" / ".env"))
 
 
 # Quick-start development settings - unsuitable for production
@@ -34,15 +34,9 @@ SECRET_KEY = env.str(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool("DJANGO_DEBUG", default=False)
 
-ALLOWED_HOSTS = [
-    host for host in env.str("DJANGO_ALLOWED_HOSTS", default="*").split(",") if host
-]
-CSRF_TRUSTED_ORIGINS = [
-    origin
-    for origin in env.str("DJANGO_CSRF_TRUSTED_ORIGINS", default="").split(",")
-    if origin
-]
+ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS")
 
+CSRF_TRUSTED_ORIGINS = env.list("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -102,8 +96,8 @@ else:
             "ENGINE": "django.db.backends.postgresql",
             "NAME": env.str("POSTGRES_DB", default=""),
             "USER": env.str("POSTGRES_USER", default=""),
-            "PASSWORD": "",
-            "HOST": "127.0.0.1",
+            "PASSWORD": env.str("POSTGRES_PASSWORD", default=""),
+            "HOST": env.str("DB_HOST", default="127.0.0.1"),
             "PORT": "5432",
         }
     }
