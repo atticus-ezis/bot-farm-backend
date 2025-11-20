@@ -63,7 +63,7 @@ ENV PATH="${APP_HOME}/.venv/bin:$PATH" \
     PYTHONPATH="${APP_HOME}/.venv/lib/python3.13/site-packages:$PYTHONPATH"
 
 RUN chmod +x ${APP_HOME}/entrypoint.sh
-ENTRYPOINT ["/entrypoint.sh"]
+
 EXPOSE 8000
 
 

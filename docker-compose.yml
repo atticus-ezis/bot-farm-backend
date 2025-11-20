@@ -2,7 +2,7 @@ services:
   db:
     image: postgres:18-alpine
     env_file:
-      - ./.envs/.local/.env
+      - ./.envs/.env.db
     ports:
       - "5432:5432"
     volumes:
@@ -26,6 +26,8 @@ services:
       - ./.envs/.local/.env
     environment:
       - DB_HOST=db
+
+    entrypoint: ["/app/entrypoint.sh"]
 
     volumes:
       - .:/app

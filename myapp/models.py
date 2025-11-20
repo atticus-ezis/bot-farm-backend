@@ -1,49 +1,61 @@
 from django.db import models
 
-from .fields import FlexibleArrayField
-
 
 class BotSubmission(models.Model):
-    email_submitted = models.CharField(max_length=254, null=True, blank=True)
-    raw_body = models.TextField()
-    ip_address = models.CharField(max_length=64)
-    forwarded_for = models.CharField(max_length=256, null=True, blank=True)
-    user_agent = models.TextField(null=True, blank=True)
+    # Form submission data
+    name = models.CharField(max_length=255, null=True, blank=True)
+    email = models.CharField(max_length=254, null=True, blank=True)
+    message = models.TextField(null=True, blank=True)
+
+    # Analytics data
+    ip_address = models.CharField(max_length=64, null=True, blank=True)
+    full_ip_address = models.CharField(max_length=512, null=True, blank=True)
+    agent = models.TextField(null=True, blank=True)
+    language = models.CharField(max_length=50, null=True, blank=True)
     referer = models.TextField(null=True, blank=True)
-    headers_json = models.JSONField(default=dict)
+
+    # Timestamp
     created_at = models.DateTimeField(auto_now_add=True)
-    geo = models.JSONField(null=True, blank=True)
-    detection_tags = FlexibleArrayField(blank=True)
 
     class Meta:
         ordering = ["-created_at"]
-        indexes = [
-            models.Index(fields=["-created_at"], name="myapp_botsub_created_idx"),
-            models.Index(fields=["ip_address"], name="myapp_botsub_ip_idx"),
-            models.Index(
-                fields=["email_submitted"],
-                name="myapp_botsub_email_idx",
-            ),
-        ]
 
     def __str__(self) -> str:
-        return f"{self.email_submitted or 'unknown'} @ {self.ip_address}"
+        parts = []
 
-    def save(self, *args, **kwargs):
-        tags = [tag for tag in (self.detection_tags or []) if tag]
-        self.detection_tags = sorted(set(tags))
-        super().save(*args, **kwargs)
+        # Add email if available
+        if self.email:
+            parts.append(self.email)
 
-    @property
-    def is_honeypot(self) -> bool:
-        return "honeypot-hit" in (self.detection_tags or [])
+        # Add name if available
+        if self.name:
+            parts.append(f"({self.name})")
+
+        # Add IP address for context
+        if self.ip_address:
+            parts.append(f"from {self.ip_address}")
+
+        # Build the string
+        if parts:
+            return " ".join(parts)
+
+        # Fallback to ID if nothing else is available
+        return f"Bot Submission #{self.id or 'new'}"
 
     @property
     def email_preview(self) -> str:
-        if not self.email_submitted:
+        if not self.email:
             return ""
-        return (
-            (self.email_submitted[:48] + "…")
-            if len(self.email_submitted) > 48
-            else self.email_submitted
-        )
+        return (self.email[:48] + "…") if len(self.email) > 48 else self.email
+
+
+class XSSAttack(models.Model):
+    field = models.CharField(max_length=255)
+    pattern = models.CharField(max_length=255)
+    snippet = models.TextField()
+    submission = models.ForeignKey(
+        BotSubmission, on_delete=models.CASCADE, related_name="xss_attacks"
+    )
+
+    def __str__(self) -> str:
+        return f"{self.pattern} in {self.field}"
