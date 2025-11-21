@@ -53,7 +53,7 @@ def get_bot_referer(meta: Dict[str, Any]) -> str | None:
     return meta.get("HTTP_REFERER")
 
 
-def get_bot_ip(meta: Dict[str, Any]) -> tuple[str, str | None]:
+def get_bot_ip(meta: Dict[str, Any]) -> str | None:
     # Standard proxies (check both X-Forwarded-For and Forwarded-For)
     forwarded_for = meta.get("HTTP_X_FORWARDED_FOR") or meta.get("HTTP_FORWARDED_FOR")
     if forwarded_for and forwarded_for.strip():
@@ -63,7 +63,7 @@ def get_bot_ip(meta: Dict[str, Any]) -> tuple[str, str | None]:
             return ip
 
     # Nginx sets this
-    real_ip = meta.get("HTTP_X_REAL_IP").strip()
+    real_ip = meta.get("HTTP_X_REAL_IP")
     if real_ip:
         return real_ip.strip()
 

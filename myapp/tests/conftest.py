@@ -1,5 +1,7 @@
 import pytest
+from uuid import UUID
 
+from django.urls import reverse
 from rest_framework.test import APIClient
 from django.core.cache import cache
 
@@ -75,4 +77,39 @@ def x_forwarded_for_headers():
     return {
         "HTTP_X_FORWARDED_FOR": "203.0.113.1, 198.51.100.2",
         "REMOTE_ADDR": "10.0.0.1",
+    }
+
+
+@pytest.fixture
+def honeypot_url():
+    """Fixture providing the honeypot endpoint URL."""
+    return reverse("honeypot")
+
+
+@pytest.fixture
+def test_correlation_token():
+    """Fixture providing a test correlation token UUID."""
+    return UUID("12345678-1234-5678-1234-567812345678")
+
+
+@pytest.fixture
+def sample_post_data(test_correlation_token):
+    """Fixture providing sample POST data for honeypot tests."""
+    return {
+        "ctoken": str(test_correlation_token),
+        "username": "testuser",
+        "message": "Hello world",
+        "comment": "Test comment",
+    }
+
+
+@pytest.fixture
+def clean_post_data(test_correlation_token):
+    """Fixture providing clean POST data without XSS."""
+    return {
+        "ctoken": str(test_correlation_token),
+        "username": "normal_user",
+        "message": "This is a normal message with no malicious content",
+        "comment": "Regular comment here",
+        "content": "Some content text",
     }

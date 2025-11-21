@@ -3,6 +3,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.permissions import AllowAny
 from uuid import uuid4
 
 from .models import BotEvent, XSSAttack
@@ -13,6 +14,8 @@ class HoneypotView(APIView):
     """
     Logs GET and POST bot activity, detects XSS, and correlates follow-up requests.
     """
+
+    permission_classes = [AllowAny]
 
     def _log_event(self, request, method_type, ctoken):
         params = request.GET if method_type == "GET" else request.data
@@ -81,3 +84,22 @@ class HoneypotView(APIView):
         self._log_event(request, "POST", ctoken)
 
         return Response({"status": "ok"}, status=status.HTTP_200_OK)
+
+
+class BotSummaryView(APIView):
+    """
+    Returns a summary of the analytics data.
+    """
+
+    def get(self, request):
+        total_events = BotEvent.objects.count()
+        total_xss_attempts = XSSAttack.objects.count()
+        total_unique_ips = BotEvent.objects.values("ip_address").distinct().count()
+        return Response(
+            {
+                "total_bot_traffic": total_events,
+                "total_xss_attempts": total_xss_attempts,
+                "total_unique_ips": total_unique_ips,
+            },
+            status=status.HTTP_200_OK,
+        )
