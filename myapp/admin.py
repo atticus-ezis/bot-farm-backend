@@ -1,46 +1,113 @@
 from django.contrib import admin
 
-from .models import BotSubmission, XSSAttack
+from .models import BotEvent, XSSAttack
 
 
 class XSSAttackInline(admin.TabularInline):
-    """Inline admin for XSSAttack, displayed within BotSubmission admin."""
+    """Inline admin for XSSAttack, displayed within BotEvent admin."""
 
     model = XSSAttack
     extra = 0
-    readonly_fields = ("field", "pattern", "snippet")
+    readonly_fields = ("field", "pattern", "raw_value", "created_at")
     can_delete = False
-    fields = ("field", "pattern", "snippet")
+    fields = ("field", "pattern", "raw_value", "created_at")
     verbose_name = "XSS Attack"
     verbose_name_plural = "XSS Attacks"
 
 
-@admin.register(BotSubmission)
-class BotSubmissionAdmin(admin.ModelAdmin):
+@admin.register(BotEvent)
+class BotEventAdmin(admin.ModelAdmin):
     list_display = (
         "id",
         "created_at",
-        "name",
-        "email_preview",
+        "method",
+        "request_path",
+        "email",
         "ip_address",
         "agent",
         "language",
-        "has_xss_attacks",
+        "xss_attempted",
+        "xss_attack_count",
         "xss_patterns",
     )
-    list_filter = ("created_at", "ip_address", "language")
-    search_fields = ("name", "email", "ip_address", "message", "agent", "referer")
-    readonly_fields = ("created_at", "email_preview")
+    list_filter = (
+        "created_at",
+        "method",
+        "xss_attempted",
+        "ip_address",
+        "language",
+    )
+    search_fields = (
+        "email",
+        "ip_address",
+        "request_path",
+        "agent",
+        "referer",
+        "correlation_token",
+    )
+    readonly_fields = (
+        "id",
+        "created_at",
+        "correlation_token",
+    )
     ordering = ("-created_at",)
     inlines = [XSSAttackInline]
+    date_hierarchy = "created_at"
 
-    def has_xss_attacks(self, obj):
-        """Display whether this submission has XSS attacks."""
+    fieldsets = (
+        (
+            "Request Information",
+            {
+                "fields": (
+                    "method",
+                    "request_path",
+                    "correlation_token",
+                    "data",
+                )
+            },
+        ),
+        (
+            "Client Information",
+            {
+                "fields": (
+                    "ip_address",
+                    "geo_location",
+                    "agent",
+                    "referer",
+                    "language",
+                )
+            },
+        ),
+        (
+            "Contact Information",
+            {
+                "fields": ("email",),
+            },
+        ),
+        (
+            "Security",
+            {
+                "fields": ("xss_attempted",),
+            },
+        ),
+        (
+            "Metadata",
+            {
+                "fields": (
+                    "id",
+                    "created_at",
+                )
+            },
+        ),
+    )
+
+    def xss_attack_count(self, obj):
+        """Display count of XSS attacks for this event."""
         count = obj.xss_attacks.count()
-        return f"Yes ({count})" if count > 0 else "No"
+        return count if count > 0 else "—"
 
-    has_xss_attacks.short_description = "XSS Attacks"
-    has_xss_attacks.boolean = False
+    xss_attack_count.short_description = "XSS Count"
+    xss_attack_count.admin_order_field = "xss_attempted"
 
     def xss_patterns(self, obj):
         """Display XSS attack patterns, sortable by pattern."""
@@ -57,25 +124,79 @@ class BotSubmissionAdmin(admin.ModelAdmin):
 class XSSAttackAdmin(admin.ModelAdmin):
     list_display = (
         "id",
-        "submission",
+        "bot_event",
         "field",
         "pattern",
-        "submission_created_at",
+        "created_at",
+        "bot_event_created_at",
+        "bot_event_method",
+        "bot_event_path",
     )
-    list_filter = ("pattern", "field")
+    list_filter = ("pattern", "field", "created_at", "bot_event__method")
     search_fields = (
         "field",
         "pattern",
-        "snippet",
-        "submission__email",
-        "submission__name",
+        "raw_value",
+        "bot_event__email",
+        "bot_event__request_path",
+        "bot_event__ip_address",
     )
-    readonly_fields = ("submission_created_at",)
-    ordering = ("-id",)
+    readonly_fields = (
+        "bot_event_created_at",
+        "bot_event_method",
+        "bot_event_path",
+        "created_at",
+    )
+    ordering = ("-created_at",)
+    date_hierarchy = "created_at"
 
-    def submission_created_at(self, obj):
-        """Display the submission's created_at timestamp."""
-        return obj.submission.created_at if obj.submission else None
+    fieldsets = (
+        (
+            "Attack Details",
+            {
+                "fields": (
+                    "bot_event",
+                    "field",
+                    "pattern",
+                    "raw_value",
+                )
+            },
+        ),
+        (
+            "Event Information",
+            {
+                "fields": (
+                    "bot_event_method",
+                    "bot_event_path",
+                    "bot_event_created_at",
+                )
+            },
+        ),
+        (
+            "Metadata",
+            {
+                "fields": ("created_at",),
+            },
+        ),
+    )
 
-    submission_created_at.short_description = "Submission Date"
-    submission_created_at.admin_order_field = "submission__created_at"
+    def bot_event_created_at(self, obj):
+        """Display the bot event's created_at timestamp."""
+        return obj.bot_event.created_at if obj.bot_event else None
+
+    bot_event_created_at.short_description = "Event Date"
+    bot_event_created_at.admin_order_field = "bot_event__created_at"
+
+    def bot_event_method(self, obj):
+        """Display the bot event's HTTP method."""
+        return obj.bot_event.method if obj.bot_event else None
+
+    bot_event_method.short_description = "Method"
+    bot_event_method.admin_order_field = "bot_event__method"
+
+    def bot_event_path(self, obj):
+        """Display the bot event's request path."""
+        return obj.bot_event.request_path if obj.bot_event else None
+
+    bot_event_path.short_description = "Request Path"
+    bot_event_path.admin_order_field = "bot_event__request_path"

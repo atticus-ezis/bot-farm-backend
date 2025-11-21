@@ -1,61 +1,51 @@
+# myapp/models.py
+import uuid
 from django.db import models
 
 
-class BotSubmission(models.Model):
-    # Form submission data
-    name = models.CharField(max_length=255, null=True, blank=True)
-    email = models.CharField(max_length=254, null=True, blank=True)
-    message = models.TextField(null=True, blank=True)
+class BotEvent(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
-    # Analytics data
-    ip_address = models.CharField(max_length=64, null=True, blank=True)
-    full_ip_address = models.CharField(max_length=512, null=True, blank=True)
+    # Tracking
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    geo_location = models.CharField(max_length=255, null=True, blank=True)
     agent = models.TextField(null=True, blank=True)
-    language = models.CharField(max_length=50, null=True, blank=True)
     referer = models.TextField(null=True, blank=True)
+    language = models.CharField(max_length=100, null=True, blank=True)
+    request_path = models.CharField(max_length=500)
+    method = models.CharField(max_length=10)
+    email = models.EmailField(null=True, blank=True)
+    # Params submitted (JSON format)
+    data = models.JSONField(null=True, blank=True)
+    # Correlation token
+    correlation_token = models.UUIDField(null=True, blank=True, db_index=True)
 
-    # Timestamp
     created_at = models.DateTimeField(auto_now_add=True)
 
-    class Meta:
-        ordering = ["-created_at"]
+    xss_attempted = models.BooleanField(default=False)
 
-    def __str__(self) -> str:
-        parts = []
+    def __str__(self):
+        return f"{self.method} | {self.request_path} | XSS: {self.xss_attempted}"
 
-        # Add email if available
-        if self.email:
-            parts.append(self.email)
-
-        # Add name if available
-        if self.name:
-            parts.append(f"({self.name})")
-
-        # Add IP address for context
-        if self.ip_address:
-            parts.append(f"from {self.ip_address}")
-
-        # Build the string
-        if parts:
-            return " ".join(parts)
-
-        # Fallback to ID if nothing else is available
-        return f"Bot Submission #{self.id or 'new'}"
-
-    @property
-    def email_preview(self) -> str:
-        if not self.email:
-            return ""
-        return (self.email[:48] + "…") if len(self.email) > 48 else self.email
+    # def save(self, *args, **kwargs):
+    #     if self.xss_attempted:
+    #         return super().save(*args, **kwargs)
+    #     if XSSAttack.objects.filter(bot_event=self).exists():
+    #         self.xss_attempted = True
+    #     super().save(*args, **kwargs)
 
 
 class XSSAttack(models.Model):
-    field = models.CharField(max_length=255)
-    pattern = models.CharField(max_length=255)
-    snippet = models.TextField()
-    submission = models.ForeignKey(
-        BotSubmission, on_delete=models.CASCADE, related_name="xss_attacks"
+    bot_event = models.ForeignKey(
+        BotEvent,
+        related_name="xss_attacks",
+        on_delete=models.PROTECT,
     )
+    field = models.CharField(max_length=200)  # which input had the XSS
+    pattern = models.CharField(max_length=100)  # pattern name
+    raw_value = models.TextField()  # full payload/context
 
-    def __str__(self) -> str:
-        return f"{self.pattern} in {self.field}"
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.pattern} attack in field '{self.field}'"

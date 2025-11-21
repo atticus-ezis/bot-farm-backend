@@ -1,143 +1,83 @@
-import csv
-import io
+# myapp/views.py
 
-from django.conf import settings
-from django.http import HttpResponse
-from drf_yasg.utils import swagger_auto_schema
-from rest_framework import status, viewsets
-from rest_framework.decorators import action
-from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from uuid import uuid4
 
-from .models import BotSubmission
-from .pagination import StandardResultsSetPagination
-from .serializers import (
-    BotSubmissionDetailSerializer,
-    BotSubmissionListSerializer,
-    SubmissionStatsSerializer,
-    ContactBotSerializer,
-)
-from .swagger_schema import contact_bot_post_schema
-from .throttles import BotSubmissionRateThrottle
-from .services import create_bot_record
-from . import utils
+from .models import BotEvent, XSSAttack
+from .utils import extract_xss, extract_meta_data, extract_email_from_payload
 
 
-class ContactBotView(APIView):
-    permission_classes = [AllowAny]
-    throttle_classes = [BotSubmissionRateThrottle]
+class HoneypotView(APIView):
+    """
+    Logs GET and POST bot activity, detects XSS, and correlates follow-up requests.
+    """
 
-    @swagger_auto_schema(**contact_bot_post_schema)
-    def post(self, request, *args, **kwargs):
-        if not settings.CONTACT_BOT_ENABLED:
-            return Response(
-                {"error": "Contact bot is disabled"}, status=status.HTTP_400_BAD_REQUEST
-            )
+    def _log_event(self, request, method_type, ctoken):
+        params = request.GET if method_type == "GET" else request.data
 
-        serializer = ContactBotSerializer(data=request.data)
-        if serializer.is_valid():
-            cleaned_data = serializer.validated_data
-            meta_data = request.META
-            create_bot_record(cleaned_data, meta_data)
-            return Response(status=status.HTTP_200_OK)
+        meta_data = extract_meta_data(request.META)
+        email = extract_email_from_payload(params)
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-class BotSubmissionViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = BotSubmission.objects.all()
-    permission_classes = [AllowAny]
-    pagination_class = StandardResultsSetPagination
-
-    def get_serializer_class(self):
-        if self.action == "retrieve":
-            return BotSubmissionDetailSerializer
-        return BotSubmissionListSerializer
-
-    def get_queryset(self):
-        qs = super().get_queryset()
-        params = self.request.query_params
-        if params.get("ip"):
-            qs = qs.filter(ip_address__icontains=params["ip"])
-        if params.get("email"):
-            qs = qs.filter(email_submitted__icontains=params["email"])
-        if params.get("tag"):
-            qs = qs.filter(detection_tags__contains=[params["tag"]])
-
-        start_date = params.get("start_date")
-        if start_date:
-            qs = qs.filter(created_at__date__gte=start_date)
-        end_date = params.get("end_date")
-        if end_date:
-            qs = qs.filter(created_at__date__lte=end_date)
-        return qs
-
-    @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
-    def export(self, request):
-        queryset = self.filter_queryset(self.get_queryset())
-        buffer = io.StringIO()
-        writer = csv.writer(buffer)
-        writer.writerow(
-            [
-                "id",
-                "timestamp",
-                "ip_address",
-                "email",
-                "user_agent",
-                "referer",
-                "tags",
-            ]
+        # Create main BotEvent
+        bot_event = BotEvent.objects.create(
+            method=method_type,
+            ip_address=meta_data["ip_address"],
+            geo_location=meta_data["geo_location"],
+            agent=meta_data["agent"],
+            referer=meta_data["referer"],
+            language=meta_data["lang"],
+            request_path=request.path,
+            data=params,
+            correlation_token=ctoken,
+            email=email,
         )
-        for submission in queryset:
-            writer.writerow(
-                [
-                    submission.id,
-                    submission.created_at.isoformat(),
-                    submission.ip_address,
-                    submission.email_submitted or "",
-                    (submission.user_agent or "")[:200],
-                    submission.referer or "",
-                    ",".join(submission.detection_tags or []),
-                ]
-            )
 
-        response = HttpResponse(buffer.getvalue(), content_type="text/csv")
-        response["Content-Disposition"] = 'attachment; filename="bot_submissions.csv"'
-        return response
+        # Detect XSS in all fields
+        for key, value in params.items():
+            pattern_name, raw_value = extract_xss(value)
+            if pattern_name:
+                XSSAttack.objects.create(
+                    bot_event=bot_event,
+                    field=key,
+                    pattern=pattern_name,
+                    raw_value=raw_value,
+                )
+            bot_event.xss_attempted = True
+            bot_event.save(update_fields=["xss_attempted"])
 
+    def get(self, request):
+        # Create a correlation token
+        ctoken = uuid4()
 
-class AnalyticsSummaryView(APIView):
-    permission_classes = [AllowAny]
+        self._log_event(request, "GET", ctoken)
 
-    def get(self, request, *args, **kwargs):
-        total = BotSubmission.objects.count()
-        honeypot = BotSubmission.objects.filter(
-            detection_tags__contains=["honeypot-hit"]
-        ).count()
-        unique_ips = (
-            BotSubmission.objects.values_list("ip_address", flat=True)
-            .distinct()
-            .count()
-        )
-        recent_limit = getattr(settings, "BOT_ANALYTICS_RECENT_LIMIT", 50)
-        recent = BotSubmission.objects.all()[:recent_limit]
-        stats = {
-            "total_submissions": total,
-            "honeypot_hits": honeypot,
-            "unique_ips": unique_ips,
-            "recent": recent,
-            "tag_counts": utils.summarize_tags(BotSubmission.objects.all()),
-        }
-        stats_serializer = SubmissionStatsSerializer(stats)
-        return Response(stats_serializer.data)
+        html = f"""
+        <html><body>
+            <h3>Loading...</h3>
+            <form id='hp' method='POST'>
+                <input type="hidden" name="ctoken" value="{ctoken}">
+                <input name="username">
+                <input name="message">
+                <input name="comment">
+                <textarea name="content"></textarea>
+                <button type="submit">Submit</button>
+            </form>
+            <script>
+            setTimeout(() => document.getElementById('hp').submit(), 300);
+            </script>
+        </body></html>
+        """
 
+        return Response(html, content_type="text/html", status=200)
 
-class PublicRecentSubmissionsView(APIView):
-    permission_classes = [AllowAny]
+    #
+    # POST → logs XSS in posted form data, correlates via ctoken
+    #
+    def post(self, request):
+        ctoken = request.data.get("ctoken")
 
-    def get(self, request, *args, **kwargs):
-        limit = min(int(request.query_params.get("limit", 20)), 100)
-        submissions = BotSubmission.objects.all()[:limit]
-        serializer = BotSubmissionListSerializer(submissions, many=True)
-        return Response(serializer.data)
+        self._log_event(request, "POST", ctoken)
+
+        return Response({"status": "ok"}, status=status.HTTP_200_OK)

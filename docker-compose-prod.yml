@@ -26,6 +26,7 @@ services:
       - ./.envs/.production/.env
     environment:
       - DB_HOST=db
+      - RUN_TESTS=true
 
     entrypoint: ["/app/entrypoint.sh"]
 

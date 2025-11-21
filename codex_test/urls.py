@@ -24,7 +24,7 @@ from rest_framework.authentication import SessionAuthentication
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("api/", include("myapp.urls")),
+    path("", include("myapp.urls")),
 ]
 
 api_info = openapi.Info(

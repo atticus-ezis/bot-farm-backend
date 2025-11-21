@@ -31,12 +31,22 @@ def clear_cache():
 
 # Test data fixtures for contact-bot and other API tests
 @pytest.fixture
-def valid_submission_data():
+def no_xss_submission_data():
     """Fixture providing valid submission data."""
     return {
         "name": "John Doe",
         "email": "john@example.com",
         "message": "Hello, this is a test message",
+    }
+
+
+@pytest.fixture
+def xss_submission_data():
+    """Fixture providing valid submission data."""
+    return {
+        "name": "John Doe",
+        "email": "john@example.com",
+        "message": "I hope this message doesn't contain any XSS <script>alert('XSS')</script> attacks",
     }
 
 

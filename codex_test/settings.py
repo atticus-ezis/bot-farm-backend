@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "myapp",
     "django.contrib.postgres",
     "drf_yasg",
+    "django_filters",
 ]
 
 MIDDLEWARE = [
@@ -158,9 +159,6 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_PAGINATION_CLASS": "myapp.pagination.StandardResultsSetPagination",
     "PAGE_SIZE": 25,
-    "DEFAULT_THROTTLE_CLASSES": [
-        "myapp.throttles.BotSubmissionRateThrottle",
-    ],
     "DEFAULT_THROTTLE_RATES": {
         "contact_bot": env.str("CONTACT_BOT_RATE_LIMIT", default="30/min"),
     },
