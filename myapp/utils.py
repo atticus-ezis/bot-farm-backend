@@ -1,6 +1,8 @@
 import re
 from typing import Any, Dict
 
+from .patterns import ATTACK_PATTERNS
+
 
 EMAIL_REGEX = re.compile(r"([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})", re.IGNORECASE)
 
@@ -106,56 +108,20 @@ def build_geo_from_headers(meta: Dict[str, Any]) -> Dict[str, Any] | None:
 # Patterns to detect common XSS vectors
 # Single source of truth for XSS pattern definitions
 
-# -----------------------------------------
-# 1) XSS Pattern Definitions (name, label, regex)
-# -----------------------------------------
 
-XSS_PATTERNS = [
-    (
-        "script_tag",
-        "Script Tag",
-        re.compile(r"<\s*script\b[^>]*>.*?</script>", re.IGNORECASE | re.DOTALL),
-    ),
-    (
-        "iframe_tag",
-        "Iframe Tag",
-        re.compile(r"<\s*iframe\b[^>]*>.*?</iframe>", re.IGNORECASE | re.DOTALL),
-    ),
-    (
-        "img_onerror",
-        "Image onerror Handler",
-        re.compile(r"<\s*img\b[^>]*\bonerror\s*=[^>]*>", re.IGNORECASE),
-    ),
-    (
-        "event_handler",
-        "Event Handler",
-        re.compile(r"<[^>]*\bon[a-z\-]+\s*=[^>]*>", re.IGNORECASE),
-    ),
-    ("js_scheme", "JavaScript Scheme", re.compile(r"javascript\s*:", re.IGNORECASE)),
-    ("data_html", "Data HTML URI", re.compile(r"data:\s*text/html", re.IGNORECASE)),
-    ("css_expression", "CSS Expression", re.compile(r"expression\s*\(", re.IGNORECASE)),
-    (
-        "meta_refresh",
-        "Meta Refresh",
-        re.compile(r"<\s*meta\b[^>]*http-equiv=['\"]?refresh", re.IGNORECASE),
-    ),
-    (
-        "object_embed",
-        "Object/Embed/Applet Tag",
-        re.compile(r"<\s*(object|embed|applet)\b[^>]*>", re.IGNORECASE),
-    ),
-    ("svg_tag", "SVG Tag", re.compile(r"<\s*svg\b[^>]*>", re.IGNORECASE)),
-]
-
-
-def extract_xss(value: str):
+def extract_attacks(value: str):
+    """
+    Extract all types of attacks from value.
+    Returns list of (pattern_name, category, matched_text) tuples.
+    """
     if not isinstance(value, str):
-        return None, None
-    for name, _, regex in XSS_PATTERNS:
+        return []
+    findings = []
+    for name, category, regex in ATTACK_PATTERNS:
         match = regex.search(value)
         if match:
-            return name, match.group(0)  # return full context
-    return None, None
+            findings.append((name, category, match.group(0)))
+    return findings
 
 
 def extract_meta_data(meta: Dict[str, Any]) -> Dict[str, Any]:

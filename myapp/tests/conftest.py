@@ -81,6 +81,19 @@ def x_forwarded_for_headers():
 
 
 @pytest.fixture
+def comprehensive_headers():
+    """Fixture providing comprehensive headers including geo-location data."""
+    return {
+        "HTTP_USER_AGENT": "Mozilla/5.0 (Test Browser)",
+        "HTTP_REFERER": "https://example.com/contact",
+        "HTTP_ACCEPT_LANGUAGE": "en-US,en;q=0.9",
+        "REMOTE_ADDR": "192.168.1.100",
+        "HTTP_CF_IPCOUNTRY": "US",
+        "HTTP_CF_IPCITY": "New York",
+    }
+
+
+@pytest.fixture
 def honeypot_url():
     """Fixture providing the honeypot endpoint URL."""
     return reverse("honeypot")

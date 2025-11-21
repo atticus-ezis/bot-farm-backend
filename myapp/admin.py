@@ -1,18 +1,19 @@
 from django.contrib import admin
+from django.db.models import Count
 
-from .models import BotEvent, XSSAttack
+from .models import BotEvent, AttackType
 
 
-class XSSAttackInline(admin.TabularInline):
-    """Inline admin for XSSAttack, displayed within BotEvent admin."""
+class AttackTypeInline(admin.TabularInline):
+    """Inline admin for AttackType, displayed within BotEvent admin."""
 
-    model = XSSAttack
+    model = AttackType
     extra = 0
-    readonly_fields = ("field", "pattern", "raw_value", "created_at")
+    readonly_fields = ("target_field", "pattern", "category", "raw_value", "created_at")
     can_delete = False
-    fields = ("field", "pattern", "raw_value", "created_at")
-    verbose_name = "XSS Attack"
-    verbose_name_plural = "XSS Attacks"
+    fields = ("target_field", "pattern", "category", "raw_value", "created_at")
+    verbose_name = "Attack"
+    verbose_name_plural = "Attacks"
 
 
 @admin.register(BotEvent)
@@ -26,14 +27,14 @@ class BotEventAdmin(admin.ModelAdmin):
         "ip_address",
         "agent",
         "language",
-        "xss_attempted",
-        "xss_attack_count",
-        "xss_patterns",
+        "attack_attempted",
+        "attack_count",
+        "attack_categories",
     )
     list_filter = (
         "created_at",
         "method",
-        "xss_attempted",
+        "attack_attempted",
         "ip_address",
         "language",
     )
@@ -49,9 +50,11 @@ class BotEventAdmin(admin.ModelAdmin):
         "id",
         "created_at",
         "correlation_token",
+        "attack_count",
+        "attack_categories",
     )
     ordering = ("-created_at",)
-    inlines = [XSSAttackInline]
+    inlines = [AttackTypeInline]
     date_hierarchy = "created_at"
 
     fieldsets = (
@@ -87,7 +90,11 @@ class BotEventAdmin(admin.ModelAdmin):
         (
             "Security",
             {
-                "fields": ("xss_attempted",),
+                "fields": (
+                    "attack_attempted",
+                    "attack_count",
+                    "attack_categories",
+                ),
             },
         ),
         (
@@ -101,41 +108,53 @@ class BotEventAdmin(admin.ModelAdmin):
         ),
     )
 
-    def xss_attack_count(self, obj):
-        """Display count of XSS attacks for this event."""
-        count = obj.xss_attacks.count()
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        qs = qs.annotate(_attack_count=Count("attacks", distinct=True))
+        return qs
+
+    def attack_count(self, obj):
+        """Display count of attacks for this event."""
+        count = obj.attacks.count()
         return count if count > 0 else "—"
 
-    xss_attack_count.short_description = "XSS Count"
-    xss_attack_count.admin_order_field = "xss_attempted"
+    attack_count.short_description = "Attack Count"
+    attack_count.admin_order_field = "_attack_count"
 
-    def xss_patterns(self, obj):
-        """Display XSS attack patterns, sortable by pattern."""
-        patterns = obj.xss_attacks.values_list("pattern", flat=True).distinct()
-        if patterns:
-            return ", ".join(sorted(patterns))
+    def attack_categories(self, obj):
+        """Display attack categories found in this event."""
+        categories = obj.attacks.values_list("category", flat=True).distinct()
+        if categories:
+            return ", ".join(sorted(categories))
         return "—"
 
-    xss_patterns.short_description = "XSS Patterns"
-    xss_patterns.admin_order_field = "xss_attacks__pattern"
+    attack_categories.short_description = "Attack Categories"
 
 
-@admin.register(XSSAttack)
-class XSSAttackAdmin(admin.ModelAdmin):
+@admin.register(AttackType)
+class AttackTypeAdmin(admin.ModelAdmin):
     list_display = (
         "id",
         "bot_event",
-        "field",
+        "target_field",
         "pattern",
+        "category",
         "created_at",
         "bot_event_created_at",
         "bot_event_method",
         "bot_event_path",
     )
-    list_filter = ("pattern", "field", "created_at", "bot_event__method")
-    search_fields = (
-        "field",
+    list_filter = (
+        "category",
         "pattern",
+        "target_field",
+        "created_at",
+        "bot_event__method",
+    )
+    search_fields = (
+        "target_field",
+        "pattern",
+        "category",
         "raw_value",
         "bot_event__email",
         "bot_event__request_path",
@@ -156,8 +175,9 @@ class XSSAttackAdmin(admin.ModelAdmin):
             {
                 "fields": (
                     "bot_event",
-                    "field",
+                    "target_field",
                     "pattern",
+                    "category",
                     "raw_value",
                 )
             },

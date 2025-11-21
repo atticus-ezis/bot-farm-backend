@@ -5,9 +5,45 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from uuid import uuid4
+from .enums import AttackCategory
+from .models import BotEvent, AttackType
+from .utils import extract_attacks, extract_meta_data, extract_email_from_payload
 
-from .models import BotEvent, XSSAttack
-from .utils import extract_xss, extract_meta_data, extract_email_from_payload
+
+class BotSummaryView(APIView):
+    """
+    Returns a summary of the analytics data.
+    """
+
+    def get(self, request):
+        total_events = BotEvent.objects.count()
+        total_unique_ips = BotEvent.objects.values("ip_address").distinct().count()
+
+        total_attacks = AttackType.objects.count()
+        total_xss_attempts = AttackType.objects.filter(
+            category=AttackCategory.XSS
+        ).count()
+        total_sqli_attempts = AttackType.objects.filter(
+            category=AttackCategory.SQLI
+        ).count()
+        total_lfi_attempts = AttackType.objects.filter(
+            category=AttackCategory.LFI
+        ).count()
+        total_cmd_attempts = AttackType.objects.filter(
+            category=AttackCategory.CMD
+        ).count()
+        return Response(
+            {
+                "total_bot_traffic": total_events,
+                "total_unique_ips": total_unique_ips,
+                "total_attacks": total_attacks,
+                "total_xss_attempts": total_xss_attempts,
+                "total_sqli_attempts": total_sqli_attempts,
+                "total_lfi_attempts": total_lfi_attempts,
+                "total_cmd_attempts": total_cmd_attempts,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class HoneypotView(APIView):
@@ -37,18 +73,26 @@ class HoneypotView(APIView):
             email=email,
         )
 
-        # Detect XSS in all fields
+        # Detect attacks in all fields
+        attacks_found = False
         for key, value in params.items():
-            pattern_name, raw_value = extract_xss(value)
-            if pattern_name:
-                XSSAttack.objects.create(
-                    bot_event=bot_event,
-                    field=key,
-                    pattern=pattern_name,
-                    raw_value=raw_value,
-                )
-            bot_event.xss_attempted = True
-            bot_event.save(update_fields=["xss_attempted"])
+            attack_list = extract_attacks(value)
+            if attack_list:
+                for attack in attack_list:
+                    pattern, category, match = attack
+                    AttackType.objects.create(
+                        bot_event=bot_event,
+                        target_field=key,
+                        pattern=pattern,
+                        raw_value=match,
+                        category=category.value,  # Convert enum to string value
+                    )
+                attacks_found = True
+
+        # Only set attack_attempted if XSS was actually detected
+        if attacks_found:
+            bot_event.attack_attempted = True
+            bot_event.save(update_fields=["attack_attempted"])
 
     def get(self, request):
         # Create a correlation token
@@ -84,22 +128,3 @@ class HoneypotView(APIView):
         self._log_event(request, "POST", ctoken)
 
         return Response({"status": "ok"}, status=status.HTTP_200_OK)
-
-
-class BotSummaryView(APIView):
-    """
-    Returns a summary of the analytics data.
-    """
-
-    def get(self, request):
-        total_events = BotEvent.objects.count()
-        total_xss_attempts = XSSAttack.objects.count()
-        total_unique_ips = BotEvent.objects.values("ip_address").distinct().count()
-        return Response(
-            {
-                "total_bot_traffic": total_events,
-                "total_xss_attempts": total_xss_attempts,
-                "total_unique_ips": total_unique_ips,
-            },
-            status=status.HTTP_200_OK,
-        )

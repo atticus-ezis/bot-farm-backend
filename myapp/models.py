@@ -22,30 +22,39 @@ class BotEvent(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
-    xss_attempted = models.BooleanField(default=False)
+    attack_attempted = models.BooleanField(default=False)
 
     def __str__(self):
-        return f"{self.method} | {self.request_path} | XSS: {self.xss_attempted}"
-
-    # def save(self, *args, **kwargs):
-    #     if self.xss_attempted:
-    #         return super().save(*args, **kwargs)
-    #     if XSSAttack.objects.filter(bot_event=self).exists():
-    #         self.xss_attempted = True
-    #     super().save(*args, **kwargs)
+        return f"{self.method} | {self.request_path} | XSS: {self.attack_attempted}"
 
 
-class XSSAttack(models.Model):
+class AttackType(models.Model):
+    class AttackCategory(models.TextChoices):
+        XSS = "XSS", "Cross-Site Scripting"
+        SQLI = "SQLI", "SQL Injection"
+        LFI = "LFI", "Local File Inclusion"
+        CMD = "CMD", "Command Injection"
+        TRAVERSAL = "TRAVERSAL", "Directory Traversal"
+        SSTI = "SSTI", "Template Injection"
+        OTHER = "OTHER", "Other"
+
     bot_event = models.ForeignKey(
         BotEvent,
-        related_name="xss_attacks",
+        related_name="attacks",
         on_delete=models.PROTECT,
     )
-    field = models.CharField(max_length=200)  # which input had the XSS
-    pattern = models.CharField(max_length=100)  # pattern name
-    raw_value = models.TextField()  # full payload/context
+
+    target_field = models.CharField(max_length=200)  # which input triggered detection
+    pattern = models.CharField(max_length=100)  # e.g. img_onerror, or_1_eq_1
+    category = models.CharField(
+        "Attack Type",
+        max_length=50,
+        choices=AttackCategory.choices,
+    )
+
+    raw_value = models.TextField()  # full context: "<img src=x onerror=alert(1)>"
 
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.pattern} attack in field '{self.field}'"
+        return f"{self.category} ({self.pattern}) in '{self.target_field}'"
