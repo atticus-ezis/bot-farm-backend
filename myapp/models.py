@@ -4,6 +4,10 @@ from django.db import models
 
 
 class BotEvent(models.Model):
+    class MethodChoice(models.TextChoices):
+        GET = "GET", "GET"
+        POST = "POST", "POST"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     # Tracking
@@ -11,9 +15,10 @@ class BotEvent(models.Model):
     geo_location = models.CharField(max_length=255, null=True, blank=True)
     agent = models.TextField(null=True, blank=True)
     referer = models.TextField(null=True, blank=True)
+    origin = models.TextField(null=True, blank=True)
     language = models.CharField(max_length=100, null=True, blank=True)
     request_path = models.CharField(max_length=500)
-    method = models.CharField(max_length=10)
+    method = models.CharField(max_length=10, choices=MethodChoice.choices)
     email = models.EmailField(null=True, blank=True)
     # Params submitted (JSON format)
     data = models.JSONField(null=True, blank=True)
@@ -22,7 +27,7 @@ class BotEvent(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
-    attack_attempted = models.BooleanField(default=False)
+    attack_attempted = models.BooleanField(default=False, db_index=True)
 
     def __str__(self):
         return f"{self.method} | {self.request_path} | XSS: {self.attack_attempted}"

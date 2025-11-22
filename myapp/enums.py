@@ -9,3 +9,8 @@ class AttackCategory(Enum):
     TRAVERSAL = "TRAVERSAL"
     SSTI = "SSTI"
     OTHER = "OTHER"
+
+
+class MethodChoice(Enum):
+    GET = "GET"
+    POST = "POST"

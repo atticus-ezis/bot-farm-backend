@@ -1,72 +1,80 @@
-# from django_filters import rest_framework as filters
+from django_filters import rest_framework as filters
 
-# from .models import BotSubmission, XSSAttack
+from .models import BotEvent, AttackType
+from .enums import MethodChoice
 
 
-# class BotSubmissionFilter(filters.FilterSet):
-#     ip_address = filters.CharFilter(field_name="ip_address", lookup_expr="icontains")
-#     email = filters.CharFilter(field_name="email", lookup_expr="icontains")
-#     # Use ChoiceFilter for pattern to enable dropdown with valid choices
-#     pattern = filters.ChoiceFilter(
-#         field_name="xss_attacks__pattern",
-#         distinct=True,
-#     )
-#     start_date = filters.DateFilter(field_name="created_at", lookup_expr="gte")
-#     end_date = filters.DateFilter(field_name="created_at", lookup_expr="lte")
-#     language = filters.ChoiceFilter(field_name="language")
-#     agent = filters.ChoiceFilter(field_name="agent")
+class AggregatePathFilter(filters.FilterSet):
+    """Custom filterset for AggregatePath with advanced filtering options."""
 
-#     def __init__(self, *args, **kwargs):
-#         super().__init__(*args, **kwargs)
-#         # Set choices dynamically for dropdown support
-#         # Language choices from distinct database values
-#         language_choices = (
-#             BotSubmission.objects.values_list("language", flat=True)
-#             .distinct()
-#             .exclude(language__isnull=True)
-#             .exclude(language="")
-#             .order_by("language")
-#         )
-#         self.filters["language"].extra["choices"] = [
-#             (lang, lang) for lang in language_choices
-#         ]
+    most_popular_attack = filters.ChoiceFilter(
+        field_name="most_popular_attack", choices=AttackType.AttackCategory.choices
+    )
 
-#         # Agent choices from distinct database values
-#         agent_choices = (
-#             BotSubmission.objects.values_list("agent", flat=True)
-#             .distinct()
-#             .exclude(agent__isnull=True)
-#             .exclude(agent="")
-#             .order_by("agent")
-#         )
-#         self.filters["agent"].extra["choices"] = [
-#             (agent, agent) for agent in agent_choices
-#         ]
-#         # Pattern choices from distinct database values (only patterns that exist)
-#         pattern_choices = (
-#             XSSAttack.objects.values_list("pattern", flat=True)
-#             .distinct()
-#             .exclude(pattern__isnull=True)
-#             .exclude(pattern="")
-#             .order_by("pattern")
-#         )
-#         # Map pattern values to their human-readable labels from XSS_PATTERN_CHOICES
-#         from .utils import XSS_PATTERN_CHOICES
+    class Meta:
+        model = BotEvent
+        fields = ["most_popular_attack"]
 
-#         pattern_label_map = {choice[0]: choice[1] for choice in XSS_PATTERN_CHOICES}
-#         self.filters["pattern"].extra["choices"] = [
-#             (pattern, pattern_label_map.get(pattern, pattern))
-#             for pattern in pattern_choices
-#         ]
 
-#     class Meta:
-#         model = BotSubmission
-#         fields = [
-#             "ip_address",
-#             "email",
-#             "language",
-#             "agent",
-#             "pattern",
-#             "start_date",
-#             "end_date",
-#         ]
+class BotEventFilter(filters.FilterSet):
+    """Custom filterset for BotEvent with advanced filtering options."""
+
+    # exact filters
+    ip_address = filters.CharFilter(field_name="ip_address", lookup_expr="exact")
+    exact_request_path = filters.CharFilter(
+        field_name="request_path", lookup_expr="exact"
+    )
+    # Text filters with icontains lookup
+    email = filters.CharFilter(field_name="email", lookup_expr="icontains")
+    geo_location = filters.CharFilter(
+        field_name="geo_location", lookup_expr="icontains"
+    )
+    language = filters.CharFilter(field_name="language", lookup_expr="icontains")
+    request_path = filters.CharFilter(
+        field_name="request_path", lookup_expr="icontains"
+    )
+    referer = filters.CharFilter(field_name="referer", lookup_expr="icontains")
+    origin = filters.CharFilter(field_name="origin", lookup_expr="icontains")
+    agent = filters.CharFilter(field_name="agent", lookup_expr="icontains")
+    raw_attack_value = filters.CharFilter(
+        field_name="attacks__raw_value",
+        lookup_expr="icontains",
+    )
+    bot_data = filters.JSONFilter(
+        field_name="data",
+        lookup_expr="icontains",
+    )
+    # Boolean filter
+    attack_attempted = filters.BooleanFilter(field_name="attack_attempted")
+
+    # Choice filters
+    method = filters.ChoiceFilter(
+        field_name="method", choices=[MethodChoice.GET.value, MethodChoice.POST.value]
+    )
+
+    # Attack category filter (through related AttackType)
+    attack_category = filters.ChoiceFilter(
+        field_name="attacks__category",
+        distinct=True,
+        choices=AttackType.AttackCategory.choices,
+    )
+
+    class Meta:
+        model = BotEvent
+        fields = [
+            "ip_address",
+            "email",
+            "geo_location",
+            "request_path",
+            "referer",
+            "origin",
+            "method",
+            "agent",
+            "language",
+            "attack_attempted",
+            "attack_category",
+            "raw_attack_value",
+            "bot_data",
+            "correlation_token",
+            "exact_request_path",
+        ]

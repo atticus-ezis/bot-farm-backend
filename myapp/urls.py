@@ -1,7 +1,10 @@
 from django.urls import path
+from rest_framework.routers import DefaultRouter
 
+from .views import HoneypotView, BotAnalyticsListView, SnapShotView
 
-from .views import HoneypotView
+router = DefaultRouter()
+router.register(r"bot-events", BotAnalyticsListView, basename="bot-event")
 
 urlpatterns = [
     # path(
@@ -57,4 +60,5 @@ urlpatterns = [
     path("query/", HoneypotView.as_view(), name="honeypot"),
     path("lookup/", HoneypotView.as_view(), name="honeypot"),
     path("filter/", HoneypotView.as_view(), name="honeypot"),
-]
+    path("api/snapshot/", SnapShotView.as_view(), name="snapshot"),
+] + router.urls

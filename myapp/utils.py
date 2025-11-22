@@ -55,6 +55,16 @@ def get_bot_referer(meta: Dict[str, Any]) -> str | None:
     return meta.get("HTTP_REFERER")
 
 
+def get_bot_origin(meta: Dict[str, Any]) -> str | None:
+    origin = meta.get("HTTP_ORIGIN")
+    if origin:
+        return origin.strip()
+    host = meta.get("HTTP_HOST")
+    if host:
+        return host.strip()
+    return None
+
+
 def get_bot_ip(meta: Dict[str, Any]) -> str | None:
     # Standard proxies (check both X-Forwarded-For and Forwarded-For)
     forwarded_for = meta.get("HTTP_X_FORWARDED_FOR") or meta.get("HTTP_FORWARDED_FOR")
@@ -131,4 +141,5 @@ def extract_meta_data(meta: Dict[str, Any]) -> Dict[str, Any]:
         "referer": get_bot_referer(meta),
         "lang": get_bot_language(meta),
         "geo_location": build_geo_from_headers(meta),
+        "origin": get_bot_origin(meta),
     }

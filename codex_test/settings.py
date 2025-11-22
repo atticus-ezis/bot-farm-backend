@@ -162,7 +162,15 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "contact_bot": env.str("CONTACT_BOT_RATE_LIMIT", default="30/min"),
     },
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+        "rest_framework.filters.SearchFilter",
+        "rest_framework.filters.OrderingFilter",
+    ],
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
+    "PAGE_SIZE": 10,
 }
+
 
 CONTACT_BOT_ENABLED = env.bool("CONTACT_BOT_ENABLED", default=True)
 BOT_ANALYTICS_RECENT_LIMIT = env.int("BOT_ANALYTICS_RECENT_LIMIT", default=50)
