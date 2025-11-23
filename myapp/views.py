@@ -8,7 +8,12 @@ from rest_framework.permissions import AllowAny
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from uuid import uuid4
-from .filters import BotEventFilter, AggregatePathFilter
+from .filters import (
+    BotEventFilter,
+    AggregatePathFilter,
+    AggregateIPFilter,
+    AttackTypeFilter,
+)
 from .models import BotEvent, AttackType
 from .utils import extract_attacks, extract_meta_data, extract_email_from_payload
 from .pagination import StandardResultsSetPagination
@@ -16,12 +21,15 @@ from .serializers import (
     BotEventListSerializer,
     BotEventDetailSerializer,
     PathAnalyticsSerializer,
+    IPAnalyticsListSerializer,
+    IPAnalyticsDetailSerializer,
     SnapShotCategorySerializer,
-    SnapShotHighestThreatIpSerializer,
-    SnapShotCategoryPathListSerializer,
+    AttackTypeDetailSerializer,
+    AttackTypeListSerializer,
 )
 from django.db.models import Count, Q, Subquery, OuterRef, Max
 from .enums import MethodChoice
+from django.contrib.postgres.aggregates import ArrayAgg
 
 
 class SnapShotView(APIView):
@@ -34,38 +42,13 @@ class SnapShotView(APIView):
         total_events = BotEvent.objects.count()
         total_injection_attempts = AttackType.objects.count()
         total_ips = BotEvent.objects.values("ip_address").distinct().count()
-        highest_threat_ips = (
-            BotEvent.objects.values("ip_address", "geo_location", "origin")
-            .annotate(count=Count("attacks", distinct=False))
-            .order_by("-count")[:3]
-        )
-
-        highest_threat_ips = list(highest_threat_ips)
-        highest_threat_ips_serializer = SnapShotHighestThreatIpSerializer(
-            highest_threat_ips, many=True
-        )
-        # attack categories
-        # totals, get vs post, most popular paths
+        # category data
         category_queryset = (
             AttackType.objects.values("category")
             .annotate(
                 total_count=Count("id"),
-                get_method_count=Count(
-                    "id",
-                    filter=Q(
-                        bot_event__method=MethodChoice.GET.value,
-                    ),
-                    distinct=False,
-                ),
-                post_method_count=Count(
-                    "id",
-                    filter=Q(
-                        bot_event__method=MethodChoice.POST.value,
-                    ),
-                    distinct=False,
-                ),
             )
-            .order_by("-total_count")
+            .order_by("-total_count")[:3]
         )
         category_data = []
         for category_item in list(category_queryset):
@@ -84,37 +67,24 @@ class SnapShotView(APIView):
                 {
                     "category": category,
                     "total_count": category_item["total_count"],
-                    "get_method_count": category_item["get_method_count"],
-                    "post_method_count": category_item["post_method_count"],
                     "most_popular_paths": most_popular_paths,
                 }
             )
         category_serializer = SnapShotCategorySerializer(category_data, many=True)
         ### popular paths
 
-        popular_paths_queryset = (
-            BotEvent.objects.values("request_path")
-            .annotate(path_count=Count("id"))
-            .order_by("-path_count", "request_path")[:3]
-        )
-        popular_paths_list = list(popular_paths_queryset)
-        popular_paths_serializer = SnapShotCategoryPathListSerializer(
-            popular_paths_list, many=True
-        )
         return Response(
             {
                 "total_events": total_events,
-                "total_injection_attempts": total_injection_attempts,
-                "total_ips": total_ips,
-                "highest_threat_ips": highest_threat_ips_serializer.data,
-                "attack_category_snapshot": category_serializer.data,
-                "paths_snapshot": popular_paths_serializer.data,
+                "total_injection_attempts": total_injection_attempts,  # link AttackTypeViewSet (default)
+                "total_ips": total_ips,  # link aggregate ip viewset (default)
+                "attack_category_snapshot": category_serializer.data,  # link AttackTypeViewSet (filter by category clicked)
             },
             status=status.HTTP_200_OK,
         )
 
 
-class AggregatePathListViewSet(generics.ListAPIView):
+class AggregatePathList(generics.ListAPIView):
     """
     Read-only ViewSet for aggregated path analytics with filtering, searching, and ordering.
     """
@@ -131,7 +101,7 @@ class AggregatePathListViewSet(generics.ListAPIView):
         "spam_count",
         "attack_count",
         "request_path",
-        "created_at",  # Most recent event per path
+        "created_at",
     ]
     ordering = [
         "-traffic_count",
@@ -141,9 +111,6 @@ class AggregatePathListViewSet(generics.ListAPIView):
 
     def get_queryset(self):
         # path_names
-        # annotate values --
-        # traffic types + counts
-        # attack categories present and counts
         queryset = BotEvent.objects.values(
             "request_path"
         ).annotate(
@@ -166,7 +133,12 @@ class AggregatePathListViewSet(generics.ListAPIView):
                 ),
             ),
             attack_count=Count("id", filter=Q(attack_attempted=True)),
-            created_at=Max("created_at"),  # Most recent event per path
+            created_at=Max("created_at"),  # Most recent event per path,
+            attacks_used=ArrayAgg(
+                "attacks__category",
+                distinct=True,
+                filter=Q(attack_attempted=True),
+            ),
             most_popular_attack=Subquery(
                 AttackType.objects.filter(
                     bot_event__request_path=OuterRef("request_path")
@@ -178,6 +150,102 @@ class AggregatePathListViewSet(generics.ListAPIView):
             ),
         )
         return queryset
+
+
+class AggregateIPViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Read-only ViewSet for aggregated IP analytics with filtering, searching, and ordering.
+
+    list:
+    Returns a paginated list of IP addresses with minimal information (ip_address, traffic_count, created_at).
+
+    retrieve:
+    Returns detailed information for a specific IP address including all attacks committed by that IP.
+    """
+
+    permission_classes = [AllowAny]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_class = AggregateIPFilter
+    search_fields = ["ip_address", "email", "referer"]
+    lookup_field = "ip_address"
+    ordering_fields = [
+        "traffic_count",
+        "scan_count",
+        "spam_count",
+        "attack_count",
+        "ip_address",
+        "created_at",
+    ]
+    ordering = ["-traffic_count", "-created_at"]
+
+    def get_queryset(self):
+        queryset = BotEvent.objects.values("ip_address").annotate(
+            traffic_count=Count("id"),
+            scan_count=Count(
+                "id",
+                filter=Q(
+                    attack_attempted=False,
+                    method=MethodChoice.GET.value,
+                    data__isnull=True,
+                )
+                | Q(attack_attempted=False, method=MethodChoice.GET.value, data={}),
+            ),
+            spam_count=Count(
+                "id",
+                filter=Q(
+                    attack_attempted=False,
+                    data__isnull=False,
+                    method=MethodChoice.POST.value,
+                ),
+            ),
+            attack_count=Count("id", filter=Q(attack_attempted=True)),
+            attack_categories=ArrayAgg(
+                "attacks__category",
+                distinct=True,
+                filter=Q(
+                    attacks__category__isnull=False,
+                ),
+            ),
+            referer=Subquery(
+                BotEvent.objects.filter(ip_address=OuterRef("ip_address"))
+                .order_by("created_at")
+                .values("referer")[:1]
+                .values_list("referer", flat=True)
+            ),
+            email=Subquery(
+                BotEvent.objects.filter(ip_address=OuterRef("ip_address"))
+                .order_by("-created_at")
+                .values("email")[:1]
+                .values_list("email", flat=True)
+            ),
+            agent=Subquery(
+                BotEvent.objects.filter(ip_address=OuterRef("ip_address"))
+                .order_by("created_at")
+                .values("agent")[:1]
+                .values_list("agent", flat=True)
+            ),
+            language=Subquery(
+                BotEvent.objects.filter(ip_address=OuterRef("ip_address"))
+                .order_by("created_at")
+                .values("language")[:1]
+                .values_list("language", flat=True)
+            ),
+            geo_location=Subquery(
+                BotEvent.objects.filter(ip_address=OuterRef("ip_address"))
+                .order_by("created_at")
+                .values("geo_location")[:1]
+                .values_list("geo_location", flat=True)
+            ),
+            created_at=Max("created_at"),  # Most recent event per IP
+        )
+        return queryset
+
+    def get_serializer_class(self):
+        """Use list serializer for list, detail serializer for retrieve."""
+        if self.action == "retrieve":
+            return IPAnalyticsDetailSerializer
+        return IPAnalyticsListSerializer
 
 
 class BotEventViewSet(viewsets.ReadOnlyModelViewSet):
@@ -217,7 +285,7 @@ class BotEventViewSet(viewsets.ReadOnlyModelViewSet):
         "created_at",
         "ip_address",
         "geo_location",
-        "attack_count",  # Can order by annotated attack_count
+        "attack_count",
     ]
     ordering = ["-created_at"]  # Default ordering (newest first)
 
@@ -228,7 +296,15 @@ class BotEventViewSet(viewsets.ReadOnlyModelViewSet):
         queryset = super().get_queryset()
 
         # Annotate with attack count for ordering
-        queryset = queryset.annotate(attack_count=Count("attacks", distinct=True))
+        queryset = queryset.annotate(attack_count=Count("attacks"))
+        # get attack categories
+        queryset = queryset.annotate(
+            attack_categories=ArrayAgg(
+                "attacks__category",
+                distinct=True,
+                filter=Q(attack_attempted=True),
+            )
+        )
 
         return queryset
 
@@ -237,6 +313,44 @@ class BotEventViewSet(viewsets.ReadOnlyModelViewSet):
         if self.action == "retrieve":
             return BotEventDetailSerializer
         return BotEventListSerializer
+
+
+class AttackTypeViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Read-only ViewSet for AttackType with advanced filtering, searching, and ordering.
+
+    list:
+    Returns a paginated list of all attacks with filtering, searching, and ordering.
+
+    retrieve:
+    Returns a single attack with full details and linked BotEvent information.
+    """
+
+    # filtered by CATEGORY on snapshot view + path analytics view
+
+    queryset = AttackType.objects.select_related("bot_event").all()
+    permission_classes = [AllowAny]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_class = AttackTypeFilter
+    search_fields = [
+        "category",
+        "pattern",
+        "target_field",
+        "raw_value",
+        "bot_event__email",
+        "bot_event__referer",
+    ]
+    ordering_fields = [
+        "created_at",
+    ]
+    ordering = ["-created_at"]  # Default ordering (newest first)
+
+    def get_serializer_class(self):
+        """Use detail serializer for retrieve, list serializer for list."""
+        if self.action == "retrieve":
+            return AttackTypeDetailSerializer
+        return AttackTypeListSerializer
 
 
 class HoneypotView(APIView):

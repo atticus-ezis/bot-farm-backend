@@ -1,5 +1,6 @@
 import re
 from typing import Any, Dict
+from urllib.parse import urlparse
 
 from .patterns import ATTACK_PATTERNS
 
@@ -52,7 +53,18 @@ def get_bot_language(meta: Dict[str, Any]) -> str | None:
 
 
 def get_bot_referer(meta: Dict[str, Any]) -> str | None:
-    return meta.get("HTTP_REFERER")
+    raw_url = meta.get("HTTP_REFERER")
+    if not raw_url:
+        return None
+    try:
+        parsed = urlparse(raw_url.strip())
+        domain = parsed.netloc
+        # Remove port if present (e.g., "example.com:8080" -> "example.com")
+        if ":" in domain:
+            domain = domain.split(":")[0]
+        return domain if domain else None
+    except Exception:
+        return None
 
 
 def get_bot_origin(meta: Dict[str, Any]) -> str | None:

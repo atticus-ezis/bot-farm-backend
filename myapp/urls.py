@@ -1,64 +1,20 @@
 from django.urls import path
-from rest_framework.routers import DefaultRouter
 
-from .views import HoneypotView, BotAnalyticsListView, SnapShotView
-
-router = DefaultRouter()
-router.register(r"bot-events", BotAnalyticsListView, basename="bot-event")
+from .views import (
+    HoneypotView,
+    SnapShotView,
+    AggregatePathList,
+)
+from .routers import router
+from .fake_urls import FAKE_URLS
 
 urlpatterns = [
-    # path(
-    #     "real/analytics/summary/",
-    #     AnalyticsSummaryView.as_view(),
-    #     name="analytics-summary",
-    # ),
-    # path(
-    #     "real/analytics/recent/",
-    #     PublicRecentSubmissionsView.as_view(),
-    #     name="analytics-recent",
-    # ),
-    # path("real/", include(submissions_router.urls)),
-    # fake paths for bots
-    path("contact/", HoneypotView.as_view(), name="honeypot"),
-    path("api/contact/", HoneypotView.as_view(), name="honeypot"),
-    path("contact/submit/", HoneypotView.as_view(), name="honeypot"),
-    path("submit-form/", HoneypotView.as_view(), name="honeypot"),
-    path("api/message/", HoneypotView.as_view(), name="honeypot"),
-    path("send-message/", HoneypotView.as_view(), name="honeypot"),
-    path("company/", HoneypotView.as_view(), name="honeypot"),
-    path("feedback/", HoneypotView.as_view(), name="honeypot"),
-    path("support-ticket/", HoneypotView.as_view(), name="honeypot"),
-    path("api/v1/comments/", HoneypotView.as_view(), name="honeypot"),
-    path("api/v1/reviews/", HoneypotView.as_view(), name="honeypot"),
-    path("api/v1/profile/update/", HoneypotView.as_view(), name="honeypot"),
-    path("submit-feedback/", HoneypotView.as_view(), name="honeypot"),
-    path("post/create/", HoneypotView.as_view(), name="honeypot"),
-    path("upload/", HoneypotView.as_view(), name="honeypot"),
-    path("upload/image/", HoneypotView.as_view(), name="honeypot"),
-    path("phpinfo.php", HoneypotView.as_view(), name="honeypot"),
-    path("adminer.php", HoneypotView.as_view(), name="honeypot"),
-    path("debug.php", HoneypotView.as_view(), name="honeypot"),
-    path("login.php", HoneypotView.as_view(), name="honeypot"),
-    path("dashboard.php", HoneypotView.as_view(), name="honeypot"),
-    path("api/admin/", HoneypotView.as_view(), name="honeypot"),
-    path("api/v1/admin/login/", HoneypotView.as_view(), name="honeypot"),
-    path("api/v1/user/create/", HoneypotView.as_view(), name="honeypot"),
-    path("api/v1/user/update/", HoneypotView.as_view(), name="honeypot"),
-    path("api/v1/messages/", HoneypotView.as_view(), name="honeypot"),
-    path("api/v1/submit/", HoneypotView.as_view(), name="honeypot"),
-    path(".git/", HoneypotView.as_view(), name="honeypot"),
-    path("backup/", HoneypotView.as_view(), name="honeypot"),
-    path("old/", HoneypotView.as_view(), name="honeypot"),
-    path("test/", HoneypotView.as_view(), name="honeypot"),
-    path("dev/", HoneypotView.as_view(), name="honeypot"),
-    path("admin-login/", HoneypotView.as_view(), name="honeypot"),
-    path("cp/", HoneypotView.as_view(), name="honeypot"),  # control panel
-    path("dashboard/login/", HoneypotView.as_view(), name="honeypot"),
-    path("adminpanel/", HoneypotView.as_view(), name="honeypot"),
-    path("search/", HoneypotView.as_view(), name="honeypot"),
-    path("api/search/", HoneypotView.as_view(), name="honeypot"),
-    path("query/", HoneypotView.as_view(), name="honeypot"),
-    path("lookup/", HoneypotView.as_view(), name="honeypot"),
-    path("filter/", HoneypotView.as_view(), name="honeypot"),
     path("api/snapshot/", SnapShotView.as_view(), name="snapshot"),
+    # Aggregate analytics endpoints
+    path(
+        "api/aggregate-paths/",
+        AggregatePathList.as_view(),
+        name="aggregate-path-list",
+    ),
+    *[path(url, HoneypotView.as_view(), name="honeypot") for url in FAKE_URLS],
 ] + router.urls
