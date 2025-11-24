@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, include
 
 from .views import (
     HoneypotView,
@@ -17,4 +17,5 @@ urlpatterns = [
         name="aggregate-path-list",
     ),
     *[path(url, HoneypotView.as_view(), name="honeypot") for url in FAKE_URLS],
-] + router.urls
+    path("api/", include(router.urls)),
+]

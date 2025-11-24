@@ -127,10 +127,6 @@ def build_geo_from_headers(meta: Dict[str, Any]) -> Dict[str, Any] | None:
     return geo
 
 
-# Patterns to detect common XSS vectors
-# Single source of truth for XSS pattern definitions
-
-
 def extract_attacks(value: str):
     """
     Extract all types of attacks from value.

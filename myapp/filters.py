@@ -22,7 +22,6 @@ class AggregateIPFilter(filters.FilterSet):
 
     # Exact filters
     ip_address = filters.CharFilter(field_name="ip_address", lookup_expr="exact")
-    email = filters.CharFilter(field_name="email", lookup_expr="exact")
     referer = filters.CharFilter(field_name="referer", lookup_expr="exact")
     agent = filters.CharFilter(field_name="agent", lookup_expr="exact")
     language = filters.CharFilter(field_name="language", lookup_expr="exact")
@@ -36,7 +35,6 @@ class AggregateIPFilter(filters.FilterSet):
         model = BotEvent
         fields = [
             "ip_address",
-            "email",
             "referer",
             "agent",
             "language",
@@ -51,7 +49,9 @@ class BotEventFilter(filters.FilterSet):
     # Exact filters
     ip_address = filters.CharFilter(field_name="ip_address", lookup_expr="exact")
     exact_request_path = filters.CharFilter(
-        field_name="request_path", lookup_expr="exact"
+        field_name="request_path",
+        lookup_expr="exact",
+        help_text="Exact match filter for request path. Alternative to request_path filter.",
     )
     email = filters.CharFilter(field_name="email", lookup_expr="exact")
     geo_location = filters.CharFilter(field_name="geo_location", lookup_expr="exact")
@@ -63,8 +63,9 @@ class BotEventFilter(filters.FilterSet):
     raw_attack_value = filters.CharFilter(
         field_name="attacks__raw_value",
         lookup_expr="icontains",
+        help_text="Search in attack raw values (case-insensitive partial match).",
     )
-    bot_data = filters.JSONFilter(
+    bot_data = filters.CharFilter(
         field_name="data",
         lookup_expr="icontains",
     )
@@ -76,13 +77,20 @@ class BotEventFilter(filters.FilterSet):
         field_name="method", choices=[MethodChoice.GET.value, MethodChoice.POST.value]
     )
     attack_categories = filters.MultipleChoiceFilter(
-        field_name="attacks__category",
+        field_name="attacks__category",  # is this model field?
         choices=AttackType.AttackCategory.choices,
+        help_text="Filter by attack categories. Can select multiple categories.",
     )
 
     # Custom bundled filters
-    spam_bot = filters.BooleanFilter(method="filter_spam_bot")
-    scan_bot = filters.BooleanFilter(method="filter_scan_bot")
+    spam_bot = filters.BooleanFilter(
+        method="filter_spam_bot",
+        help_text="Filter for spam bots: attack_attempted=False, method=POST, data__isnull=False. Set to true to show only spam bots.",
+    )
+    scan_bot = filters.BooleanFilter(
+        method="filter_scan_bot",
+        help_text="Filter for scan bots: attack_attempted=False, method=GET, (data__isnull=True OR data={}). Set to true to show only scan bots.",
+    )
 
     def filter_spam_bot(self, queryset, name, value):
         """Filter for spam bots: attack_attempted=False, method=POST, data__isnull=False"""

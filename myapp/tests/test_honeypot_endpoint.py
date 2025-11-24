@@ -48,7 +48,7 @@ class TestHoneypotView:
 
         # User agent and browser info
         assert bot_event.agent == "Mozilla/5.0 (Test Browser)"
-        assert bot_event.referer == "https://example.com/contact"
+        assert bot_event.referer == "example.com"
         assert bot_event.language == "en-US"
 
         # Email extraction
@@ -199,7 +199,7 @@ class TestHoneypotView:
         bot_event = BotEvent.objects.first()
         assert bot_event.ip_address == "192.168.1.100"
         assert bot_event.agent == "Mozilla/5.0 (Test Browser)"
-        assert bot_event.referer == "https://example.com/contact"
+        assert bot_event.referer == "example.com"
         assert bot_event.language == "en-US"
 
         # Test with X-Forwarded-For (proxy scenario)

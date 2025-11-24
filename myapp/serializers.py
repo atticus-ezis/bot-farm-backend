@@ -50,6 +50,10 @@ class AttackTypeDetailSerializer(serializers.ModelSerializer):
 class AttackTypeListSerializer(serializers.ModelSerializer):
     """Serializer for AttackType list view (summary)."""
 
+    bot_event_id = serializers.UUIDField(source="bot_event.id", read_only=True)
+    ip_address = serializers.CharField(
+        source="bot_event.ip_address", read_only=True, allow_null=True
+    )
     request_path = serializers.CharField(
         source="bot_event.request_path", read_only=True
     )
@@ -58,7 +62,9 @@ class AttackTypeListSerializer(serializers.ModelSerializer):
         model = AttackType
         fields = [
             "id",
-            "request_path",
+            "bot_event_id",  # BotEventDetailSerializer filter on id
+            "ip_address",  # IPAnalyticsDetailSerializer filter on ip_address
+            "request_path",  # BotEventList filter on path
             "target_field",
             "pattern",
             "category",
@@ -67,7 +73,7 @@ class AttackTypeListSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-##### List Serializers #####
+##### APIList Serializers #####
 class PathAnalyticsSerializer(serializers.Serializer):
     """Serializer for path analytics aggregated data."""
 
@@ -104,6 +110,7 @@ class IPAnalyticsListSerializer(serializers.Serializer):
     attack_categories = serializers.ListField(
         child=serializers.CharField(), allow_null=True, allow_empty=True
     )
+    email_count = serializers.IntegerField(allow_null=True)
     created_at = serializers.DateTimeField(allow_null=True)
 
 
@@ -124,7 +131,13 @@ class IPAnalyticsDetailSerializer(serializers.Serializer):
         allow_null=True
     )  # AttackTypeList filter on ip_address
     referer = serializers.CharField(allow_null=True)
-    email = serializers.EmailField(allow_null=True)
+    email = serializers.ListField(
+        child=serializers.EmailField(),
+        allow_null=True,
+        allow_empty=True,
+        source="emails_used",
+    )
+    email_count = serializers.IntegerField(allow_null=True)
     agent = serializers.CharField(allow_null=True)
     language = serializers.CharField(allow_null=True)
     geo_location = serializers.CharField(allow_null=True)

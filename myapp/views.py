@@ -1,5 +1,3 @@
-# myapp/views.py
-
 from rest_framework import generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -37,41 +35,48 @@ class SnapShotView(APIView):
     Returns a summary of the analytics data.
     """
 
+    permission_classes = [AllowAny]
+
     def get(self, request):
-        # headers
+        # Optimize: Use single query with select_related/prefetch_related where possible
+        # Count queries can be combined or cached, but these are simple aggregations
         total_events = BotEvent.objects.count()
         total_injection_attempts = AttackType.objects.count()
         total_ips = BotEvent.objects.values("ip_address").distinct().count()
-        # category data
-        category_queryset = (
+
+        top_three_categories = (
             AttackType.objects.values("category")
-            .annotate(
-                total_count=Count("id"),
-            )
+            .annotate(total_count=Count("id"))
             .order_by("-total_count")[:3]
         )
-        category_data = []
-        for category_item in list(category_queryset):
-            category = category_item["category"]
+        category_data = list(top_three_categories)
 
-            most_popular_paths = (
-                BotEvent.objects.filter(
-                    attack_attempted=True, attacks__category=category
+        categories = [item["category"] for item in category_data]
+
+        qs = (
+            AttackType.objects.filter(category__in=categories)
+            .values("bot_event__request_path", "category")
+            .annotate(path_count=Count("id"))
+            .order_by("category", "-path_count")
+        )
+        path_count = {}
+        for item in qs:
+            cat = item["category"]
+            if cat not in path_count:
+                path_count[cat] = []
+            if len(path_count[cat]) < 3:
+                path_count[cat].append(
+                    {
+                        "request_path": item["bot_event__request_path"],
+                        "path_count": item["path_count"],
+                    }
                 )
-                .values("request_path")
-                .annotate(path_count=Count("id", distinct=False))
-                .order_by("-path_count", "request_path")[:3]
-            )
-            most_popular_paths = list(most_popular_paths)
-            category_data.append(
-                {
-                    "category": category,
-                    "total_count": category_item["total_count"],
-                    "most_popular_paths": most_popular_paths,
-                }
-            )
+
+        for item in category_data:
+            cat = item["category"]
+            item["most_popular_paths"] = path_count.get(cat, [])
+
         category_serializer = SnapShotCategorySerializer(category_data, many=True)
-        ### popular paths
 
         return Response(
             {
@@ -167,8 +172,11 @@ class AggregateIPViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_class = AggregateIPFilter
-    search_fields = ["ip_address", "email", "referer"]
+    search_fields = ["ip_address", "referer"]
     lookup_field = "ip_address"
+    lookup_value_regex = (
+        r"[^/]+"  # Allow any characters except forward slash (for IP addresses)
+    )
     ordering_fields = [
         "traffic_count",
         "scan_count",
@@ -176,11 +184,26 @@ class AggregateIPViewSet(viewsets.ReadOnlyModelViewSet):
         "attack_count",
         "ip_address",
         "created_at",
+        "email_count",
     ]
     ordering = ["-traffic_count", "-created_at"]
 
-    def get_queryset(self):
-        queryset = BotEvent.objects.values("ip_address").annotate(
+    def _build_annotated_queryset(self, base_queryset=None):
+        """
+        Build the annotated queryset for IP analytics.
+
+        Args:
+            base_queryset: Optional base queryset to annotate. If None, uses BotEvent.objects.
+
+        Returns:
+            Annotated queryset grouped by ip_address.
+        """
+        if base_queryset is None:
+            base_queryset = BotEvent.objects
+
+        # Note: Subqueries are necessary due to different ordering requirements
+        # PostgreSQL can optimize these with proper indexes on (ip_address, created_at)
+        return base_queryset.values("ip_address").annotate(
             traffic_count=Count("id"),
             scan_count=Count(
                 "id",
@@ -213,12 +236,12 @@ class AggregateIPViewSet(viewsets.ReadOnlyModelViewSet):
                 .values("referer")[:1]
                 .values_list("referer", flat=True)
             ),
-            email=Subquery(
-                BotEvent.objects.filter(ip_address=OuterRef("ip_address"))
-                .order_by("-created_at")
-                .values("email")[:1]
-                .values_list("email", flat=True)
+            emails_used=ArrayAgg(
+                "email",
+                distinct=True,
+                filter=Q(email__isnull=False),
             ),
+            email_count=Count("email", filter=Q(email__isnull=False)),
             agent=Subquery(
                 BotEvent.objects.filter(ip_address=OuterRef("ip_address"))
                 .order_by("created_at")
@@ -239,7 +262,73 @@ class AggregateIPViewSet(viewsets.ReadOnlyModelViewSet):
             ),
             created_at=Max("created_at"),  # Most recent event per IP
         )
+
+    def get_queryset(self):
+        """Get the base queryset with annotations for IP analytics."""
+        return self._build_annotated_queryset()
+
+    def filter_queryset(self, queryset):
+        """
+        Override to handle email search in the emails_used array via the 'search' parameter.
+        This allows email to be searched alongside ip_address and referer in a single search.
+        """
+        from django.db.models import Q, Exists, OuterRef
+        from rest_framework.filters import SearchFilter
+
+        # Get search term
+        search_term = self.request.query_params.get("search", "").strip()
+
+        if search_term:
+            # Build complete OR condition: ip_address OR referer OR email
+            search_conditions = Q()
+            search_conditions |= Q(ip_address__icontains=search_term)
+            search_conditions |= Q(referer__icontains=search_term)
+            search_conditions |= Q(
+                Exists(
+                    BotEvent.objects.filter(
+                        ip_address=OuterRef("ip_address"), email__icontains=search_term
+                    )
+                )
+            )
+
+            # Apply search conditions
+            queryset = queryset.filter(search_conditions)
+
+            # Temporarily remove SearchFilter to use super() for other backends
+            # This ensures DjangoFilterBackend and OrderingFilter still work
+            original_backends = self.filter_backends
+            self.filter_backends = [b for b in original_backends if b != SearchFilter]
+            try:
+                queryset = super().filter_queryset(queryset)
+            finally:
+                self.filter_backends = original_backends
+        else:
+            # No search term, apply all filters normally (including SearchFilter for future use)
+            queryset = super().filter_queryset(queryset)
+
         return queryset
+
+    def get_object(self):
+        """Override to handle lookup on values queryset."""
+        # Get the lookup value from URL
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
+        lookup_value = self.kwargs[lookup_url_kwarg]
+
+        # Build the queryset with the IP filter applied at the base level
+        # Filtering before .values() ensures it works correctly
+        base_queryset = BotEvent.objects.filter(ip_address=lookup_value)
+        queryset = self._build_annotated_queryset(base_queryset)
+
+        # Get the first (and should be only) result
+        # Use list() with slicing instead of .first() to avoid issues with OuterRef in subqueries
+        results = list(queryset[:1])
+        obj = results[0] if results else None
+
+        if obj is None:
+            from rest_framework.exceptions import NotFound
+
+            raise NotFound("No IP analytics found for this IP address.")
+        return obj
 
     def get_serializer_class(self):
         """Use list serializer for list, detail serializer for retrieve."""
@@ -272,7 +361,8 @@ class BotEventViewSet(viewsets.ReadOnlyModelViewSet):
     # Search fields (for SearchFilter)
     search_fields = [
         "email",
-        "origin",
+        "data",
+        "referer",
         "ip_address",
         "geo_location",
         "agent",
@@ -287,7 +377,7 @@ class BotEventViewSet(viewsets.ReadOnlyModelViewSet):
         "geo_location",
         "attack_count",
     ]
-    ordering = ["-created_at"]  # Default ordering (newest first)
+    ordering = ["-created_at"]
 
     def get_queryset(self):
         """Annotate queryset with attack count for ordering."""
@@ -381,23 +471,32 @@ class HoneypotView(APIView):
             email=email,
         )
 
-        # Detect attacks in all fields
+        # Optimize: Collect all attacks and use bulk_create instead of individual creates
+        # This reduces N database writes to 1
+        attacks_to_create = []
         attacks_found = False
+
         for key, value in params.items():
             attack_list = extract_attacks(value)
             if attack_list:
                 for attack in attack_list:
                     pattern, category, match = attack
-                    AttackType.objects.create(
-                        bot_event=bot_event,
-                        target_field=key,
-                        pattern=pattern,
-                        raw_value=match,
-                        category=category.value,  # Convert enum to string value
+                    attacks_to_create.append(
+                        AttackType(
+                            bot_event=bot_event,
+                            target_field=key,
+                            pattern=pattern,
+                            raw_value=match,
+                            category=category.value,  # Convert enum to string value
+                        )
                     )
                 attacks_found = True
 
-        # Only set attack_attempted if XSS was actually detected
+        # Bulk create all attacks in a single query
+        if attacks_to_create:
+            AttackType.objects.bulk_create(attacks_to_create)
+
+        # Only set attack_attempted if attacks were actually detected
         if attacks_found:
             bot_event.attack_attempted = True
             bot_event.save(update_fields=["attack_attempted"])
