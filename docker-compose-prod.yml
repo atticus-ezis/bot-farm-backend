@@ -1,0 +1,44 @@
+services:
+  db:
+    image: postgres:18-alpine
+    env_file:
+      - ./.envs/.env.db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", 'sh -c ''pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" || exit 1''']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  web:
+    depends_on:
+      db:
+        condition: service_healthy
+
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+
+    env_file:
+      - ./.envs/.production/.env
+    environment:
+      - DB_HOST=db
+      - RUN_TESTS=true
+
+    entrypoint: ["/app/entrypoint.sh"]
+
+    volumes:
+      - .:/app
+      - venv_cache:/app/.venv
+
+    command: ["gunicorn", "codex_test.wsgi:application", "--bind", "0.0.0.0:8000"]
+
+    ports:
+      - "8000:8000"
+
+volumes:
+  postgres_data:
+  venv_cache:
