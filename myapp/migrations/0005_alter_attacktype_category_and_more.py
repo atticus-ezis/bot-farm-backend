@@ -13,28 +13,40 @@ def _generate_uuids_for_attacktype(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('myapp', '0004_botevent_origin_alter_botevent_attack_attempted_and_more'),
+        ("myapp", "0004_botevent_origin_alter_botevent_attack_attempted_and_more"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='attacktype',
-            name='category',
-            field=models.CharField(choices=[('XSS', 'Cross-Site Scripting'), ('SQLI', 'SQL Injection'), ('LFI', 'Local File Inclusion'), ('CMD', 'Command Injection'), ('TRAVERSAL', 'Directory Traversal'), ('SSTI', 'Template Injection'), ('OTHER', 'Other')], db_index=True, max_length=50, verbose_name='Attack Type'),
+            model_name="attacktype",
+            name="category",
+            field=models.CharField(
+                choices=[
+                    ("XSS", "Cross-Site Scripting"),
+                    ("SQLI", "SQL Injection"),
+                    ("LFI", "Local File Inclusion"),
+                    ("CMD", "Command Injection"),
+                    ("TRAVERSAL", "Directory Traversal"),
+                    ("SSTI", "Template Injection"),
+                    ("OTHER", "Other"),
+                ],
+                db_index=True,
+                max_length=50,
+                verbose_name="Attack Type",
+            ),
         ),
         migrations.AlterField(
-            model_name='attacktype',
-            name='created_at',
+            model_name="attacktype",
+            name="created_at",
             field=models.DateTimeField(auto_now_add=True, db_index=True),
         ),
         # Custom migration to convert id from bigint to UUID
         # This requires multiple steps because PostgreSQL can't cast bigint to uuid directly
         # Step 1: Add new UUID field (temporary, nullable)
         migrations.AddField(
-            model_name='attacktype',
-            name='new_id',
+            model_name="attacktype",
+            name="new_id",
             field=models.UUIDField(default=uuid.uuid4, editable=False, null=True),
         ),
         # Step 2: Generate UUIDs for all existing records
@@ -44,8 +56,8 @@ class Migration(migrations.Migration):
         ),
         # Step 3: Make new_id NOT NULL
         migrations.AlterField(
-            model_name='attacktype',
-            name='new_id',
+            model_name="attacktype",
+            name="new_id",
             field=models.UUIDField(default=uuid.uuid4, editable=False),
         ),
         # Step 4: Drop the old primary key constraint using raw SQL
@@ -55,14 +67,14 @@ class Migration(migrations.Migration):
         ),
         # Step 5: Remove old id field
         migrations.RemoveField(
-            model_name='attacktype',
-            name='id',
+            model_name="attacktype",
+            name="id",
         ),
         # Step 6: Rename new_id to id
         migrations.RenameField(
-            model_name='attacktype',
-            old_name='new_id',
-            new_name='id',
+            model_name="attacktype",
+            old_name="new_id",
+            new_name="id",
         ),
         # Step 7: Add primary key constraint and update Django state
         # Use SeparateDatabaseAndState to add constraint via SQL while updating Django state
@@ -74,79 +86,106 @@ class Migration(migrations.Migration):
                 ),
             ],
             state_operations=[
-        migrations.AlterField(
-            model_name='attacktype',
-            name='id',
-            field=models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False),
+                migrations.AlterField(
+                    model_name="attacktype",
+                    name="id",
+                    field=models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
                 ),
             ],
         ),
         migrations.AlterField(
-            model_name='botevent',
-            name='created_at',
+            model_name="botevent",
+            name="created_at",
             field=models.DateTimeField(auto_now_add=True, db_index=True),
         ),
         migrations.AlterField(
-            model_name='botevent',
-            name='email',
-            field=models.EmailField(blank=True, db_index=True, max_length=254, null=True),
+            model_name="botevent",
+            name="email",
+            field=models.EmailField(
+                blank=True, db_index=True, max_length=254, null=True
+            ),
         ),
         migrations.AlterField(
-            model_name='botevent',
-            name='geo_location',
-            field=models.CharField(blank=True, db_index=True, max_length=255, null=True),
+            model_name="botevent",
+            name="geo_location",
+            field=models.CharField(
+                blank=True, db_index=True, max_length=255, null=True
+            ),
         ),
         migrations.AlterField(
-            model_name='botevent',
-            name='ip_address',
+            model_name="botevent",
+            name="ip_address",
             field=models.GenericIPAddressField(blank=True, db_index=True, null=True),
         ),
         migrations.AlterField(
-            model_name='botevent',
-            name='method',
-            field=models.CharField(choices=[('GET', 'GET'), ('POST', 'POST')], db_index=True, max_length=10),
+            model_name="botevent",
+            name="method",
+            field=models.CharField(
+                choices=[("GET", "GET"), ("POST", "POST")], db_index=True, max_length=10
+            ),
         ),
         migrations.AlterField(
-            model_name='botevent',
-            name='origin',
+            model_name="botevent",
+            name="origin",
             field=models.TextField(blank=True, db_index=True, null=True),
         ),
         migrations.AlterField(
-            model_name='botevent',
-            name='referer',
+            model_name="botevent",
+            name="referer",
             field=models.TextField(blank=True, db_index=True, null=True),
         ),
         migrations.AlterField(
-            model_name='botevent',
-            name='request_path',
+            model_name="botevent",
+            name="request_path",
             field=models.CharField(db_index=True, max_length=500),
         ),
         migrations.AddIndex(
-            model_name='attacktype',
-            index=models.Index(fields=['bot_event', 'category'], name='attacktype_be_cat_idx'),
+            model_name="attacktype",
+            index=models.Index(
+                fields=["bot_event", "category"], name="attacktype_be_cat_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='attacktype',
-            index=models.Index(fields=['category', 'created_at'], name='attacktype_cat_created_idx'),
+            model_name="attacktype",
+            index=models.Index(
+                fields=["category", "created_at"], name="attacktype_cat_created_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='botevent',
-            index=models.Index(fields=['attack_attempted', 'method'], name='botevent_attack_method_idx'),
+            model_name="botevent",
+            index=models.Index(
+                fields=["attack_attempted", "method"], name="botevent_attack_method_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='botevent',
-            index=models.Index(fields=['attack_attempted', 'method', 'request_path'], name='botevent_atk_meth_path_idx'),
+            model_name="botevent",
+            index=models.Index(
+                fields=["attack_attempted", "method", "request_path"],
+                name="botevent_atk_meth_path_idx",
+            ),
         ),
         migrations.AddIndex(
-            model_name='botevent',
-            index=models.Index(fields=['ip_address', 'created_at'], name='botevent_ip_created_idx'),
+            model_name="botevent",
+            index=models.Index(
+                fields=["ip_address", "created_at"], name="botevent_ip_created_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='botevent',
-            index=models.Index(fields=['request_path', 'attack_attempted'], name='botevent_path_attack_idx'),
+            model_name="botevent",
+            index=models.Index(
+                fields=["request_path", "attack_attempted"],
+                name="botevent_path_attack_idx",
+            ),
         ),
         migrations.AddIndex(
-            model_name='botevent',
-            index=models.Index(fields=['ip_address', 'request_path'], name='botevent_ip_path_idx'),
+            model_name="botevent",
+            index=models.Index(
+                fields=["ip_address", "request_path"], name="botevent_ip_path_idx"
+            ),
         ),
     ]
