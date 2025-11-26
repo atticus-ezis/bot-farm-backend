@@ -205,6 +205,8 @@ class BotEventListSerializer(serializers.ModelSerializer):
             "ip_address",  # IPAnalyticsListSerializer filter on ip_address
             "attack_count",  # AttackTypeList filter on bot_event_id
             "attack_categories",  # AttackTypeList filter on category
+            "attack_attempted",
+            "geo_location",
         ]
         read_only_fields = fields
 

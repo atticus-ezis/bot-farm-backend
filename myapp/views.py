@@ -428,6 +428,7 @@ class AttackTypeViewSet(viewsets.ReadOnlyModelViewSet):
         "category",
         "pattern",
         "target_field",
+        "bot_event__request_path",
         "raw_value",
         "bot_event__email",
         "bot_event__referer",

@@ -18,4 +18,7 @@ urlpatterns = [
     ),
     *[path(url, HoneypotView.as_view(), name="honeypot") for url in FAKE_URLS],
     path("api/", include(router.urls)),
+    # api/bot-events/
+    # api/aggregate-ips/
+    # api/attacks/
 ]
