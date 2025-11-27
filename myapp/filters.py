@@ -26,9 +26,17 @@ class AggregateIPFilter(filters.FilterSet):
     agent = filters.CharFilter(field_name="agent", lookup_expr="exact")
     language = filters.CharFilter(field_name="language", lookup_expr="exact")
     geo_location = filters.CharFilter(field_name="geo_location", lookup_expr="exact")
+
+    # Choice filters
+    method = filters.ChoiceFilter(
+        field_name="method",
+        choices=BotEvent.MethodChoice.choices,
+        help_text="Filter by HTTP method (GET, POST, PUT, PATCH, DELETE).",
+    )
     attack_categories = filters.MultipleChoiceFilter(
         field_name="attacks__category",
         choices=AttackType.AttackCategory.choices,
+        help_text="Filter by attack categories. Can select multiple categories.",
     )
 
     class Meta:
@@ -39,6 +47,7 @@ class AggregateIPFilter(filters.FilterSet):
             "agent",
             "language",
             "geo_location",
+            "method",
             "attack_categories",
         ]
 
@@ -74,7 +83,9 @@ class BotEventFilter(filters.FilterSet):
 
     # Choice filters
     method = filters.ChoiceFilter(
-        field_name="method", choices=[MethodChoice.GET.value, MethodChoice.POST.value]
+        field_name="method",
+        choices=BotEvent.MethodChoice.choices,
+        help_text="Filter by HTTP method (GET, POST, PUT, PATCH, DELETE).",
     )
     attack_categories = filters.MultipleChoiceFilter(
         field_name="attacks__category",  # is this model field?
@@ -163,7 +174,8 @@ class AttackTypeFilter(filters.FilterSet):
     )
     method = filters.ChoiceFilter(
         field_name="bot_event__method",
-        choices=[("GET", "GET"), ("POST", "POST")],
+        choices=BotEvent.MethodChoice.choices,
+        help_text="Filter by HTTP method of the associated bot event (GET, POST, PUT, PATCH, DELETE).",
     )
 
     class Meta:
