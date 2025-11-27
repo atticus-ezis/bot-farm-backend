@@ -1,12 +1,21 @@
 # myapp/models.py
 import uuid
 from django.db import models
+from django.contrib.postgres.fields import ArrayField
 
 
 class BotEvent(models.Model):
     class MethodChoice(models.TextChoices):
         GET = "GET", "GET"
         POST = "POST", "POST"
+        PUT = "PUT", "PUT"
+        PATCH = "PATCH", "PATCH"
+        DELETE = "DELETE", "DELETE"
+
+    class EventCategory(models.TextChoices):
+        SCAN = "scan", "Scan"
+        SPAM = "spam", "Spam"
+        ATTACK = "attack", "Attack"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
@@ -20,18 +29,33 @@ class BotEvent(models.Model):
     origin = models.TextField(null=True, blank=True, db_index=True)
     language = models.CharField(max_length=100, null=True, blank=True)
     request_path = models.CharField(max_length=500, db_index=True)
-    method = models.CharField(
-        max_length=10, choices=MethodChoice.choices, db_index=True
-    )
     email = models.EmailField(null=True, blank=True, db_index=True)
-    # Params submitted (JSON format)
-    data = models.JSONField(null=True, blank=True)
     # Correlation token
     correlation_token = models.UUIDField(null=True, blank=True, db_index=True)
 
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     attack_attempted = models.BooleanField(default=False, db_index=True)
+    event_category = models.CharField(
+        max_length=10,
+        choices=EventCategory.choices,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Category determined at creation: scan, spam, or attack",
+    )
+
+    # params
+    method = models.CharField(
+        max_length=10,
+        choices=MethodChoice.choices,
+        db_index=True,
+        default=MethodChoice.GET.value,
+    )
+    data_present = models.BooleanField(default=False, db_index=True)
+    field_count = models.IntegerField(default=0)
+    target_fields = ArrayField(models.CharField(max_length=200), null=True, blank=True)
+    data_details = models.JSONField(null=True, blank=True)
 
     class Meta:
         indexes = [
@@ -58,6 +82,27 @@ class BotEvent(models.Model):
                 fields=["ip_address", "request_path"], name="botevent_ip_path_idx"
             ),
         ]
+
+    def set_category(self, save=True):
+        """
+        Determine and set the event_category based on current instance attributes.
+        Uses the utility function to determine the category, then sets it on the instance.
+
+        Args:
+            save: If True, save the instance after setting the category. Default True.
+        """
+        data_present = self.data_present
+        attack_attempted = self.attack_attempted
+
+        if attack_attempted:
+            self.event_category = self.EventCategory.ATTACK
+        elif data_present:
+            self.event_category = self.EventCategory.SPAM
+        else:
+            self.event_category = self.EventCategory.SCAN
+
+        if save:
+            self.save(update_fields=["event_category"])
 
     def __str__(self):
         return f"{self.method} | {self.request_path} | XSS: {self.attack_attempted}"
@@ -90,7 +135,8 @@ class AttackType(models.Model):
         db_index=True,
     )
 
-    raw_value = models.TextField()  # full context: "<img src=x onerror=alert(1)>"
+    raw_value = models.TextField()
+    full_value = models.TextField(default="")
 
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 

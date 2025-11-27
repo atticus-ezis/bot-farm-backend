@@ -39,6 +39,7 @@ class AttackTypeDetailSerializer(serializers.ModelSerializer):
             "pattern",
             "category",
             "raw_value",
+            "full_value",
             "created_at",
             "bot_event_id",  # BotEventDetailSerializer filter on id
             "ip_address",  # IPAnalyticsDetailSerializer filter on ip_address
@@ -107,11 +108,27 @@ class IPAnalyticsListSerializer(serializers.Serializer):
     attack_count = serializers.IntegerField(
         allow_null=True
     )  # AttackTypeList filter on ip_address
+    scan_count = serializers.IntegerField(
+        allow_null=True
+    )  # BotEventList scan_bot = True
+    spam_count = serializers.IntegerField(
+        allow_null=True
+    )  # BotEventList spam_bot = True
     attack_categories = serializers.ListField(
         child=serializers.CharField(), allow_null=True, allow_empty=True
     )
     email_count = serializers.IntegerField(allow_null=True)
     created_at = serializers.DateTimeField(allow_null=True)
+    geo_location = serializers.CharField(allow_null=True)
+    language = serializers.CharField(allow_null=True)
+    agent = serializers.CharField(allow_null=True)
+    referer = serializers.CharField(allow_null=True)
+    email = serializers.ListField(
+        child=serializers.EmailField(),
+        allow_null=True,
+        allow_empty=True,
+        source="emails_used",
+    )
 
 
 class IPAnalyticsDetailSerializer(serializers.Serializer):
@@ -169,7 +186,10 @@ class BotEventDetailSerializer(serializers.ModelSerializer):
             "referer",
             "origin",
             "language",
-            "data",
+            "data_present",
+            "field_count",
+            "target_fields",
+            "data_details",
             "attack_attempted",
             "attack_count",  # ^
             "attack_categories",  # ^

@@ -13,7 +13,11 @@ from .filters import (
     AttackTypeFilter,
 )
 from .models import BotEvent, AttackType
-from .utils import extract_attacks, extract_meta_data, extract_email_from_payload
+from .utils import (
+    extract_attacks,
+    extract_meta_data,
+    extract_email_from_payload,
+)
 from .pagination import StandardResultsSetPagination
 from .serializers import (
     BotEventListSerializer,
@@ -26,7 +30,6 @@ from .serializers import (
     AttackTypeListSerializer,
 )
 from django.db.models import Count, Q, Subquery, OuterRef, Max
-from .enums import MethodChoice
 from django.contrib.postgres.aggregates import ArrayAgg
 
 
@@ -122,23 +125,14 @@ class AggregatePathList(generics.ListAPIView):
         ).annotate(
             traffic_count=Count("id"),
             scan_count=Count(
-                "id",
-                filter=Q(
-                    attack_attempted=False,
-                    method=MethodChoice.GET.value,
-                    data__isnull=True,
-                )
-                | Q(attack_attempted=False, method=MethodChoice.GET.value, data={}),
+                "id", filter=Q(event_category=BotEvent.EventCategory.SCAN)
             ),
             spam_count=Count(
-                "id",
-                filter=Q(
-                    attack_attempted=False,
-                    data__isnull=False,
-                    method=MethodChoice.POST.value,
-                ),
+                "id", filter=Q(event_category=BotEvent.EventCategory.SPAM)
             ),
-            attack_count=Count("id", filter=Q(attack_attempted=True)),
+            attack_count=Count(
+                "id", filter=Q(event_category=BotEvent.EventCategory.ATTACK)
+            ),
             created_at=Max("created_at"),  # Most recent event per path,
             attacks_used=ArrayAgg(
                 "attacks__category",
@@ -173,7 +167,7 @@ class AggregateIPViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_class = AggregateIPFilter
-    search_fields = ["ip_address", "referer"]  # email
+    search_fields = ["ip_address", "referer", "geo_location", "language"]  # email
     lookup_field = "ip_address"
     lookup_value_regex = (
         r"[^/]+"  # Allow any characters except forward slash (for IP addresses)
@@ -186,6 +180,8 @@ class AggregateIPViewSet(viewsets.ReadOnlyModelViewSet):
         "ip_address",
         "created_at",
         "email_count",
+        "geo_location",
+        "language",
     ]
     ordering = ["-traffic_count", "-created_at"]
 
@@ -207,23 +203,14 @@ class AggregateIPViewSet(viewsets.ReadOnlyModelViewSet):
         return base_queryset.values("ip_address").annotate(
             traffic_count=Count("id"),
             scan_count=Count(
-                "id",
-                filter=Q(
-                    attack_attempted=False,
-                    method=MethodChoice.GET.value,
-                    data__isnull=True,
-                )
-                | Q(attack_attempted=False, method=MethodChoice.GET.value, data={}),
+                "id", filter=Q(event_category=BotEvent.EventCategory.SCAN)
             ),
             spam_count=Count(
-                "id",
-                filter=Q(
-                    attack_attempted=False,
-                    data__isnull=False,
-                    method=MethodChoice.POST.value,
-                ),
+                "id", filter=Q(event_category=BotEvent.EventCategory.SPAM)
             ),
-            attack_count=Count("id", filter=Q(attack_attempted=True)),
+            attack_count=Count(
+                "id", filter=Q(event_category=BotEvent.EventCategory.ATTACK)
+            ),
             attack_categories=ArrayAgg(
                 "attacks__category",
                 distinct=True,
@@ -272,6 +259,7 @@ class AggregateIPViewSet(viewsets.ReadOnlyModelViewSet):
         """
         Override to handle email search in the emails_used array via the 'search' parameter.
         This allows email to be searched alongside ip_address and referer in a single search.
+        OrderingFilter now works properly with simple field-based Count aggregations.
         """
         from django.db.models import Q, Exists, OuterRef
         from rest_framework.filters import SearchFilter
@@ -453,10 +441,52 @@ class HoneypotView(APIView):
     permission_classes = [AllowAny]
 
     def _log_event(self, request, method_type, ctoken):
-        params = request.GET if method_type == "GET" else request.data
+        # Get params based on method type
+        if method_type == "GET":
+            params = request.GET
+        else:
+            # For POST, PUT, PATCH, DELETE - use request.data
+            params = request.data if hasattr(request, "data") and request.data else {}
 
         meta_data = extract_meta_data(request.META)
         email = extract_email_from_payload(params)
+
+        # Optimize: Collect all attacks and use bulk_create instead of individual creates
+        # This reduces N database writes to 1
+        attacks_to_create = []
+        attacks_found = False
+
+        # Check for attacks before creating the event (to determine category)
+        # Ensure params is dict-like and iterable
+        if params:
+            for key, value in params.items():
+                attack_list = extract_attacks(value)
+                if attack_list:
+                    for attack in attack_list:
+                        pattern, category, match = attack
+                        attacks_to_create.append(
+                            AttackType(
+                                target_field=key,
+                                pattern=pattern,
+                                raw_value=match,
+                                category=category.value,  # Convert enum to string value
+                                # for full context
+                                full_value=value,
+                            )
+                        )
+                    attacks_found = True
+
+        # Extract submission data information
+        if params and isinstance(params, dict):
+            data_present = True
+            field_count = len(params)
+            target_fields = list(params.keys())
+            data_details = dict(params)  # Store all param data
+        else:
+            data_present = False
+            field_count = 0
+            target_fields = None
+            data_details = None
 
         # Create main BotEvent
         bot_event = BotEvent.objects.create(
@@ -468,40 +498,24 @@ class HoneypotView(APIView):
             language=meta_data["lang"],
             origin=meta_data["origin"],
             request_path=request.path,
-            data=params,
             correlation_token=ctoken,
             email=email,
+            attack_attempted=attacks_found,
+            # submission data
+            data_present=data_present,
+            field_count=field_count,
+            target_fields=target_fields,
+            data_details=data_details,
         )
 
-        # Optimize: Collect all attacks and use bulk_create instead of individual creates
-        # This reduces N database writes to 1
-        attacks_to_create = []
-        attacks_found = False
+        # Set event category using the model method
+        bot_event.set_category()
 
-        for key, value in params.items():
-            attack_list = extract_attacks(value)
-            if attack_list:
-                for attack in attack_list:
-                    pattern, category, match = attack
-                    attacks_to_create.append(
-                        AttackType(
-                            bot_event=bot_event,
-                            target_field=key,
-                            pattern=pattern,
-                            raw_value=match,
-                            category=category.value,  # Convert enum to string value
-                        )
-                    )
-                attacks_found = True
-
-        # Bulk create all attacks in a single query
+        # Bulk create all attacks in a single query (now that bot_event exists)
         if attacks_to_create:
+            for attack in attacks_to_create:
+                attack.bot_event = bot_event
             AttackType.objects.bulk_create(attacks_to_create)
-
-        # Only set attack_attempted if attacks were actually detected
-        if attacks_found:
-            bot_event.attack_attempted = True
-            bot_event.save(update_fields=["attack_attempted"])
 
     def get(self, request):
         # Create a correlation token
@@ -532,8 +546,36 @@ class HoneypotView(APIView):
     # POST → logs XSS in posted form data, correlates via ctoken
     #
     def post(self, request):
+        # Get correlation token from form submission (created in GET request)
+        # If not present, create new one (for direct POST requests)
         ctoken = request.data.get("ctoken")
+        if not ctoken:
+            ctoken = uuid4()
 
         self._log_event(request, "POST", ctoken)
 
         return Response({"status": "ok"}, status=status.HTTP_200_OK)
+
+    def put(self, request, *args, **kwargs):
+        """Handle PUT requests - log as scan/reconnaissance."""
+        ctoken = None  # No correlation token for unsupported methods
+        self._log_event(request, "PUT", ctoken)
+        return Response(
+            {"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN
+        )
+
+    def patch(self, request, *args, **kwargs):
+        """Handle PATCH requests - log as scan/reconnaissance."""
+        ctoken = None
+        self._log_event(request, "PATCH", ctoken)
+        return Response(
+            {"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN
+        )
+
+    def delete(self, request, *args, **kwargs):
+        """Handle DELETE requests - log as scan/reconnaissance."""
+        ctoken = None
+        self._log_event(request, "DELETE", ctoken)
+        return Response(
+            {"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN
+        )

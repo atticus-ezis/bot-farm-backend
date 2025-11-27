@@ -151,3 +151,45 @@ def extract_meta_data(meta: Dict[str, Any]) -> Dict[str, Any]:
         "geo_location": build_geo_from_headers(meta),
         "origin": get_bot_origin(meta),
     }
+
+
+def determine_event_category(
+    method: str, data: Dict[str, Any] | None, attack_attempted: bool
+) -> str | None:
+    """
+    Determine the event category based on method, data, and attack status.
+
+    Logic:
+    - If attack_attempted=True → 'attack'
+    - Else if POST with data (data is not None) → 'spam'
+    - Else if GET with no data (data is None or data={}) → 'scan'
+
+    Args:
+        method: HTTP method ('GET' or 'POST')
+        data: Request data/params (dict, None, or empty dict)
+        attack_attempted: Whether attacks were detected
+
+    Returns:
+        Event category string ('attack', 'spam', 'scan') or None for edge cases
+    """
+    from .models import BotEvent
+    from .enums import MethodChoice
+
+    if attack_attempted:
+        return BotEvent.EventCategory.ATTACK
+
+    # Check if data exists (not None) - empty dict {} still counts as data existing
+    data_is_null = data is None
+    data_is_empty_dict = data == {}
+
+    if method == MethodChoice.POST.value:
+        # For POST, spam means data is not null (even if empty dict, it's still data)
+        if not data_is_null:
+            return BotEvent.EventCategory.SPAM
+    elif method == MethodChoice.GET.value:
+        # For GET, scan means no data (null or empty dict)
+        if data_is_null or data_is_empty_dict:
+            return BotEvent.EventCategory.SCAN
+
+    # Fallback for edge cases (shouldn't happen in normal flow)
+    return None
