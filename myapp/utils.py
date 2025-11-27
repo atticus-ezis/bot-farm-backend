@@ -116,15 +116,26 @@ def get_email(cleaned_data: Dict[str, Any]) -> str | None:
     return None
 
 
-def build_geo_from_headers(meta: Dict[str, Any]) -> Dict[str, Any] | None:
+def build_geo_from_headers(meta: Dict[str, Any]) -> str | None:
+    """
+    Extract geo location (country and/or city) from headers.
+    Returns a formatted string like "Country, City" or just "Country" or "City".
+    Returns None if neither is available.
+    """
     country = meta.get("HTTP_CF_IPCOUNTRY") or meta.get("HTTP_X_APPENGINE_COUNTRY")
     city = meta.get("HTTP_CF_IPCITY")
-    if not country and not city:
-        return None
-    geo = {"country": country}
+
+    # Clean up values (strip whitespace, handle None)
+    country = country.strip() if country else None
+    city = city.strip() if city else None
+
+    if country and city:
+        return f"{country}, {city}"
+    if country:
+        return country
     if city:
-        geo["city"] = city
-    return geo
+        return city
+    return None
 
 
 def extract_attacks(value: str):
