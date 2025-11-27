@@ -2,6 +2,9 @@ from django.core.management.base import BaseCommand
 from myapp.models import BotEvent, AttackType
 from myapp.tests.factories import BotEventFactory, AttackTypeFactory
 import random
+from faker import Faker
+
+fake = Faker()
 
 
 class Command(BaseCommand):
@@ -21,18 +24,29 @@ class Command(BaseCommand):
 
     def _create_scan_event(self, ip=None):
         """Create a scan event (no data, no attack)."""
-        return BotEventFactory.create_scan_event(ip_address=ip)
+        kwargs = {}
+        if ip is not None:
+            kwargs["ip_address"] = ip
+        return BotEventFactory.create_scan_event(**kwargs)
 
     def _create_spam_event(self, ip=None):
         """Create a spam event (with data, no attack)."""
-        return BotEventFactory.create_spam_event(ip_address=ip)
+        kwargs = {}
+        if ip is not None:
+            kwargs["ip_address"] = ip
+        return BotEventFactory.create_spam_event(**kwargs)
 
     def _create_attack_event(self, ip=None, num_attacks=None):
         """Create an attack event with 1-3 attacks."""
         if num_attacks is None:
             num_attacks = random.randint(1, 3)
 
-        bot_event = BotEventFactory(ip_address=ip)
+        # Ensure IP is set - if None, let factory generate one
+        kwargs = {}
+        if ip is not None:
+            kwargs["ip_address"] = ip
+
+        bot_event = BotEventFactory(**kwargs)
         # Create attacks - AttackTypeFactory's post_generation hook handles all updates
         for _ in range(num_attacks):
             AttackTypeFactory(bot_event=bot_event)
@@ -51,7 +65,10 @@ class Command(BaseCommand):
 
         for i in range(num_bots):
             # 30% chance to use a common IP (creates aggregation opportunities)
-            ip = random.choice(common_ips) if random.random() < 0.3 else None
+            if random.random() < 0.3:
+                ip = random.choice(common_ips)
+            else:
+                ip = fake.ipv4()
 
             # Determine event type based on probabilities
             if random.random() < attack_rate:
