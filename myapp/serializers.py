@@ -165,12 +165,16 @@ class IPAnalyticsDetailSerializer(serializers.Serializer):
 class BotEventDetailSerializer(serializers.ModelSerializer):
     """Serializer for BotEvent detail view (full data)."""
 
-    attack_count = (
-        serializers.SerializerMethodField()
-    )  # AttackTypeList filter on bot_event_id
-    attack_categories = (
-        serializers.SerializerMethodField()
-    )  # AttackTypeList filter on categorty
+    attack_categories = serializers.SerializerMethodField()
+    attack_count = serializers.SerializerMethodField()
+
+    def get_attack_categories(self, obj):
+        """Get list of unique attack categories."""
+        return list(obj.attacks.values_list("category", flat=True).distinct())
+
+    def get_attack_count(self, obj):
+        """Get attack count."""
+        return obj.attacks.count()
 
     class Meta:
         model = BotEvent
@@ -184,29 +188,15 @@ class BotEventDetailSerializer(serializers.ModelSerializer):
             "geo_location",
             "agent",
             "referer",
-            "origin",
             "language",
             "data_present",
             "field_count",
             "target_fields",
             "data_details",
-            "attack_attempted",
-            "attack_count",  # ^
-            "attack_categories",  # ^
+            "attack_categories",
+            "attack_count",
         ]
         read_only_fields = fields
-
-    def get_attack_count(self, obj):
-        """Get attack count, using annotation if available."""
-        if hasattr(obj, "attack_count"):
-            return obj.attack_count
-        return obj.attacks.count()
-
-    def get_attack_categories(self, obj):
-        """Get list of unique attack categories."""
-        if hasattr(obj, "attack_categories"):
-            return obj.attack_categories or []
-        return list(obj.attacks.values_list("category", flat=True).distinct())
 
 
 class BotEventListSerializer(serializers.ModelSerializer):
@@ -214,6 +204,7 @@ class BotEventListSerializer(serializers.ModelSerializer):
 
     attack_count = serializers.SerializerMethodField()
     attack_categories = serializers.SerializerMethodField()
+    agent_snapshot = serializers.SerializerMethodField()
 
     class Meta:
         model = BotEvent
@@ -222,6 +213,7 @@ class BotEventListSerializer(serializers.ModelSerializer):
             "created_at",
             "method",
             "request_path",
+            "agent_snapshot",
             "ip_address",  # IPAnalyticsListSerializer filter on ip_address
             "attack_count",  # AttackTypeList filter on bot_event_id
             "attack_categories",  # AttackTypeList filter on category
@@ -229,6 +221,12 @@ class BotEventListSerializer(serializers.ModelSerializer):
             "geo_location",
         ]
         read_only_fields = fields
+
+    def get_agent_snapshot(self, obj):
+        """Get agent snapshot - first part of user agent string (e.g., 'Mozilla/5.0')."""
+        if obj.agent:
+            return obj.agent.split(" ")[0]
+        return None
 
     def get_attack_count(self, obj):
         """Get attack count, using annotation if available."""
