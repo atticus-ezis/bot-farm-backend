@@ -13,13 +13,25 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 import os
 import environ
+import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ENV Setup
 env = environ.Env()
-environ.Env.read_env(os.path.join(BASE_DIR / ".envs" / ".local" / ".env"))
+# Determine which env file to use based on environment variable or default to production in Docker
+# docker-compose-prod.yml sets env_file, but we also read from file for local development
+use_production = os.getenv("DJANGO_ENV") == "production" or os.path.exists(
+    "/.dockerenv"
+)
+production_env = os.path.join(BASE_DIR / ".envs" / ".production" / ".env")
+local_env = os.path.join(BASE_DIR / ".envs" / ".local" / ".env")
+
+if use_production and os.path.exists(production_env):
+    environ.Env.read_env(production_env)
+elif os.path.exists(local_env):
+    environ.Env.read_env(local_env)
 
 
 # Quick-start development settings - unsuitable for production
@@ -34,7 +46,7 @@ SECRET_KEY = env.str(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool("DJANGO_DEBUG", default=False)
 
-ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS")
+ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
 CSRF_TRUSTED_ORIGINS = env.list("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])
 
@@ -88,7 +100,13 @@ WSGI_APPLICATION = "codex_test.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-if env.str("POSTGRES_DB_URL", default=""):
+# Check for DB_URL first and use dj-database-url to parse it
+db_url = env.str("DB_URL", default="")
+if db_url:
+    DATABASES = {
+        "default": dj_database_url.parse(db_url, conn_max_age=600),
+    }
+elif env.str("POSTGRES_DB_URL", default=""):
     DATABASES = {
         "default": env.db("POSTGRES_DB_URL"),
     }
@@ -159,21 +177,13 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_PAGINATION_CLASS": "myapp.pagination.StandardResultsSetPagination",
     "PAGE_SIZE": 25,
-    "DEFAULT_THROTTLE_RATES": {
-        "contact_bot": env.str("CONTACT_BOT_RATE_LIMIT", default="30/min"),
-    },
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
         "rest_framework.filters.SearchFilter",
         "rest_framework.filters.OrderingFilter",
     ],
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
-    "PAGE_SIZE": 10,
 }
 
-
-CONTACT_BOT_ENABLED = env.bool("CONTACT_BOT_ENABLED", default=True)
-BOT_ANALYTICS_RECENT_LIMIT = env.int("BOT_ANALYTICS_RECENT_LIMIT", default=50)
 
 CORS_ALLOWED_ORIGINS = [
     origin

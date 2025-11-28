@@ -25,7 +25,6 @@ from .serializers import (
     PathAnalyticsSerializer,
     IPAnalyticsListSerializer,
     IPAnalyticsDetailSerializer,
-    SnapShotCategorySerializer,
     AttackTypeDetailSerializer,
     AttackTypeListSerializer,
 )
@@ -58,35 +57,6 @@ class SnapShotView(APIView):
             .order_by("-total_count")[:3]
         )
 
-        category_data = list(top_three_categories)
-
-        categories = [item["category"] for item in category_data]
-
-        qs = (
-            AttackType.objects.filter(category__in=categories)
-            .values("bot_event__request_path", "category")
-            .annotate(path_count=Count("id"))
-            .order_by("category", "-path_count")
-        )
-        path_count = {}
-        for item in qs:
-            cat = item["category"]
-            if cat not in path_count:
-                path_count[cat] = []
-            if len(path_count[cat]) < 3:
-                path_count[cat].append(
-                    {
-                        "request_path": item["bot_event__request_path"],
-                        "path_count": item["path_count"],
-                    }
-                )
-
-        for item in category_data:
-            cat = item["category"]
-            item["most_popular_paths"] = path_count.get(cat, [])
-
-        category_serializer = SnapShotCategorySerializer(category_data, many=True)
-
         return Response(
             {
                 "total_events": total_events,
@@ -94,7 +64,6 @@ class SnapShotView(APIView):
                 "total_ips": total_ips,  # link aggregate ip viewset (default)
                 "top_three_categories": top_three_categories,  # link AttackTypeViewSet (filter by category clicked)
                 "top_three_paths": top_three_paths,  # link aggregate path viewset (default)
-                "attack_category_snapshot": category_serializer.data,  # link AttackTypeViewSet (filter by category clicked)
             },
             status=status.HTTP_200_OK,
         )

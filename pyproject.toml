@@ -15,4 +15,5 @@ dependencies = [
     "pytest-django>=4.11.1",
     "django-filter>=25.2",
     "factory-boy>=3.3.3",
+    "dj-database-url>=3.0.1",
 ]

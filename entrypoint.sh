@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -e
 
+# Ensure script is executable (in case volume mount lost permissions)
+chmod +x /app/entrypoint.sh 2>/dev/null || true
+
 # Wait for database to be ready
 echo "Waiting for database to be ready..."
 until pg_isready -h "${DB_HOST:-db}" -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" > /dev/null 2>&1; do

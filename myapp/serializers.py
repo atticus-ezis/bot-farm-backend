@@ -3,22 +3,6 @@ from rest_framework import serializers
 from .models import BotEvent, AttackType
 
 
-##### Snapshot Serializers #####
-class SnapShotCategoryPathListSerializer(serializers.Serializer):
-    """Serializer for category path list."""
-
-    request_path = serializers.CharField()
-    path_count = serializers.IntegerField()
-
-
-class SnapShotCategorySerializer(serializers.Serializer):
-    """Serializer for category snapshot aggregated data."""
-
-    category = serializers.CharField()  # links to AttackTypeList with category filter
-    total_count = serializers.IntegerField()
-    most_popular_paths = SnapShotCategoryPathListSerializer(many=True)
-
-
 ##### Attack Serializers (defined first to avoid circular dependencies) #####
 class AttackTypeDetailSerializer(serializers.ModelSerializer):
     """Serializer for AttackType (nested in BotEvent or standalone)."""

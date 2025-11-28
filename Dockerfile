@@ -1,7 +1,7 @@
 # ============================================================================
 # Builder stage - Build dependencies and compile Python packages
 # ============================================================================
-FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS builder
+FROM --platform=linux/arm64 ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS builder
 
 ARG APP_HOME=/app
 WORKDIR ${APP_HOME}
@@ -35,7 +35,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # ============================================================================
 # Runtime stage - Minimal image with only runtime dependencies
 # ============================================================================
-FROM python:3.13-slim-bookworm AS runtime
+FROM --platform=linux/arm64 python:3.13-slim-bookworm AS runtime
 
 ARG APP_HOME=/app
 WORKDIR ${APP_HOME}
@@ -46,6 +46,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 RUN apt-get update && apt-get install --no-install-recommends -y \
   # Runtime PostgreSQL client library (not dev package)
   libpq5 \
+  # PostgreSQL client tools (for pg_isready in entrypoint)
+  postgresql-client \
   # Development tools (for dev environment)
   sudo \
   git \
@@ -60,7 +62,7 @@ COPY --from=builder ${APP_HOME} ${APP_HOME}
 
 # Set up Python environment
 ENV PATH="${APP_HOME}/.venv/bin:$PATH" \
-    PYTHONPATH="${APP_HOME}/.venv/lib/python3.13/site-packages:$PYTHONPATH"
+    PYTHONPATH="${APP_HOME}/.venv/lib/python3.13/site-packages"
 
 RUN chmod +x ${APP_HOME}/entrypoint.sh
 
