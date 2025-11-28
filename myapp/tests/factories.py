@@ -7,8 +7,87 @@ from faker import Faker
 
 from myapp.models import BotEvent, AttackType
 from myapp.enums import TargetFields
+from myapp.patterns import ATTACK_PATTERNS
 
 fake = Faker()
+
+# Build a mapping from pattern name to category for the factory
+PATTERN_TO_CATEGORY = {
+    pattern_name: category.value for pattern_name, category, _ in ATTACK_PATTERNS
+}
+
+
+def _generate_attack_payload(pattern: str, raw_value: str) -> str:
+    """Generate a realistic attack payload based on the pattern type."""
+    # XSS patterns
+    if pattern == "script_tag":
+        return f"<script>{raw_value}</script>"
+    elif pattern == "img_onerror":
+        return f'<img src=x onerror="{raw_value}">'
+    elif pattern == "iframe_tag":
+        return f"<iframe src='{raw_value}'></iframe>"
+    elif pattern == "js_scheme":
+        return f"javascript:{raw_value}"
+    elif pattern in [
+        "event_handler",
+        "css_expression",
+        "meta_refresh",
+        "object_embed",
+        "svg_tag",
+        "data_html",
+    ]:
+        return raw_value  # These are already in the raw_value format
+
+    # SQL Injection patterns
+    elif pattern == "or_1_equals_1":
+        return "admin' OR '1'='1"
+    elif pattern == "union_select":
+        return "1' UNION SELECT NULL--"
+    elif pattern == "sql_comment":
+        return "admin'--"
+    elif pattern in ["drop_table", "exec_sp", "information_schema"]:
+        return raw_value
+
+    # LFI patterns
+    elif pattern == "etc_passwd":
+        return "../../../etc/passwd"
+    elif pattern == "proc_self":
+        return "../../../proc/self/environ"
+    elif pattern == "php_wrapper":
+        return "php://filter/read=string.rot13/resource=index.php"
+    elif pattern in ["file_wrapper", "windows_path"]:
+        return raw_value
+
+    # Command Injection patterns
+    elif pattern == "pipe_command":
+        return "test; ls -la"
+    elif pattern == "command_chaining":
+        return "test && whoami"
+    elif pattern == "subshell":
+        return "$(whoami)"
+    elif pattern in ["nc_listener", "reverse_shell"]:
+        return raw_value
+
+    # Path Traversal patterns
+    elif pattern == "dot_dot_slash":
+        return "../../../etc/passwd"
+    elif pattern == "absolute_path":
+        return "/etc/passwd"
+    elif pattern == "encoded_traversal":
+        return "..%2f..%2fetc%2fpasswd"
+
+    # SSTI patterns
+    elif pattern == "jinja2_template":
+        return "{{7*7}}"
+    elif pattern == "smarty_template":
+        return "{if 1}test{/if}"
+    elif pattern == "freemarker_template":
+        return "${7*7}"
+    elif pattern in ["velocity_template", "twig_template"]:
+        return raw_value
+
+    # Default fallback
+    return raw_value
 
 
 # email shouldn't exist if data is none
@@ -115,26 +194,19 @@ class AttackTypeFactory(factory.django.DjangoModelFactory):
     id = factory.LazyFunction(uuid4)
     bot_event = factory.SubFactory(BotEventFactory)
     target_field = factory.Iterator([field.value for field in TargetFields])
-    pattern = factory.Iterator(
-        ["script_tag", "img_onerror", "or_1_equals_1", "union_select", "etc_passwd"]
-    )
-    category = factory.Iterator(
-        [
-            AttackType.AttackCategory.XSS,
-            AttackType.AttackCategory.SQLI,
-            AttackType.AttackCategory.LFI,
-            AttackType.AttackCategory.CMD,
-            AttackType.AttackCategory.TRAVERSAL,
-            AttackType.AttackCategory.SSTI,
-        ]
+    # Use all available patterns from ATTACK_PATTERNS
+    pattern = factory.Iterator([pattern_name for pattern_name, _, _ in ATTACK_PATTERNS])
+    # Category is automatically set based on the pattern using LazyAttribute
+    category = factory.LazyAttribute(
+        lambda obj: PATTERN_TO_CATEGORY.get(
+            obj.pattern, AttackType.AttackCategory.OTHER
+        )
     )
     raw_value = factory.Faker("text", max_nb_chars=200)
     # full_value is the complete field value that contained the attack
-    # For factory purposes, we'll use a realistic attack payload
+    # Generate realistic attack payloads based on pattern type
     full_value = factory.LazyAttribute(
-        lambda obj: f'<img src=x onerror="{obj.raw_value}">'
-        if obj.pattern in ["img_onerror", "script_tag"]
-        else obj.raw_value
+        lambda obj: _generate_attack_payload(obj.pattern, obj.raw_value)
     )
     created_at = factory.LazyFunction(
         lambda: timezone.now() - timedelta(days=random.randint(0, 30))

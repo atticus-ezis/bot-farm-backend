@@ -52,6 +52,12 @@ class SnapShotView(APIView):
             .annotate(total_count=Count("id"))
             .order_by("-total_count")[:3]
         )
+        top_three_paths = (
+            BotEvent.objects.values("request_path")
+            .annotate(total_count=Count("id"))
+            .order_by("-total_count")[:3]
+        )
+
         category_data = list(top_three_categories)
 
         categories = [item["category"] for item in category_data]
@@ -86,6 +92,8 @@ class SnapShotView(APIView):
                 "total_events": total_events,
                 "total_injection_attempts": total_injection_attempts,  # link AttackTypeViewSet (default)
                 "total_ips": total_ips,  # link aggregate ip viewset (default)
+                "top_three_categories": top_three_categories,  # link AttackTypeViewSet (filter by category clicked)
+                "top_three_paths": top_three_paths,  # link aggregate path viewset (default)
                 "attack_category_snapshot": category_serializer.data,  # link AttackTypeViewSet (filter by category clicked)
             },
             status=status.HTTP_200_OK,
@@ -113,7 +121,6 @@ class AggregatePathList(generics.ListAPIView):
     ]
     ordering = [
         "-traffic_count",
-        "-attack_count",
         "-created_at",
         "request_path",
     ]

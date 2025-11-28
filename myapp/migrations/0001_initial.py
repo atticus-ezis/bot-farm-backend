@@ -7,53 +7,171 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
-    dependencies = [
-    ]
+    dependencies = []
 
     operations = [
         migrations.CreateModel(
-            name='BotEvent',
+            name="BotEvent",
             fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('ip_address', models.GenericIPAddressField(blank=True, db_index=True, null=True)),
-                ('geo_location', models.CharField(blank=True, db_index=True, max_length=255, null=True)),
-                ('agent', models.TextField(blank=True, null=True)),
-                ('referer', models.TextField(blank=True, db_index=True, null=True)),
-                ('origin', models.TextField(blank=True, db_index=True, null=True)),
-                ('language', models.CharField(blank=True, max_length=100, null=True)),
-                ('request_path', models.CharField(db_index=True, max_length=500)),
-                ('email', models.EmailField(blank=True, db_index=True, max_length=254, null=True)),
-                ('correlation_token', models.UUIDField(blank=True, db_index=True, null=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True, db_index=True)),
-                ('attack_attempted', models.BooleanField(db_index=True, default=False)),
-                ('event_category', models.CharField(blank=True, choices=[('scan', 'Scan'), ('spam', 'Spam'), ('attack', 'Attack')], db_index=True, help_text='Category determined at creation: scan, spam, or attack', max_length=10, null=True)),
-                ('method', models.CharField(choices=[('GET', 'GET'), ('POST', 'POST'), ('PUT', 'PUT'), ('PATCH', 'PATCH'), ('DELETE', 'DELETE')], db_index=True, default='GET', max_length=10)),
-                ('data_present', models.BooleanField(db_index=True, default=False)),
-                ('field_count', models.IntegerField(default=0)),
-                ('target_fields', django.contrib.postgres.fields.ArrayField(base_field=models.CharField(max_length=200), blank=True, null=True, size=None)),
-                ('data_details', models.JSONField(blank=True, null=True)),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
+                ),
+                (
+                    "ip_address",
+                    models.GenericIPAddressField(blank=True, db_index=True, null=True),
+                ),
+                (
+                    "geo_location",
+                    models.CharField(
+                        blank=True, db_index=True, max_length=255, null=True
+                    ),
+                ),
+                ("agent", models.TextField(blank=True, null=True)),
+                ("referer", models.TextField(blank=True, db_index=True, null=True)),
+                ("origin", models.TextField(blank=True, db_index=True, null=True)),
+                ("language", models.CharField(blank=True, max_length=100, null=True)),
+                ("request_path", models.CharField(db_index=True, max_length=500)),
+                (
+                    "email",
+                    models.EmailField(
+                        blank=True, db_index=True, max_length=254, null=True
+                    ),
+                ),
+                (
+                    "correlation_token",
+                    models.UUIDField(blank=True, db_index=True, null=True),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True, db_index=True)),
+                ("attack_attempted", models.BooleanField(db_index=True, default=False)),
+                (
+                    "event_category",
+                    models.CharField(
+                        blank=True,
+                        choices=[
+                            ("scan", "Scan"),
+                            ("spam", "Spam"),
+                            ("attack", "Attack"),
+                        ],
+                        db_index=True,
+                        help_text="Category determined at creation: scan, spam, or attack",
+                        max_length=10,
+                        null=True,
+                    ),
+                ),
+                (
+                    "method",
+                    models.CharField(
+                        choices=[
+                            ("GET", "GET"),
+                            ("POST", "POST"),
+                            ("PUT", "PUT"),
+                            ("PATCH", "PATCH"),
+                            ("DELETE", "DELETE"),
+                        ],
+                        db_index=True,
+                        default="GET",
+                        max_length=10,
+                    ),
+                ),
+                ("data_present", models.BooleanField(db_index=True, default=False)),
+                ("field_count", models.IntegerField(default=0)),
+                (
+                    "target_fields",
+                    django.contrib.postgres.fields.ArrayField(
+                        base_field=models.CharField(max_length=200),
+                        blank=True,
+                        null=True,
+                        size=None,
+                    ),
+                ),
+                ("data_details", models.JSONField(blank=True, null=True)),
             ],
             options={
-                'indexes': [models.Index(fields=['attack_attempted', 'method'], name='botevent_attack_method_idx'), models.Index(fields=['attack_attempted', 'method', 'request_path'], name='botevent_atk_meth_path_idx'), models.Index(fields=['ip_address', 'created_at'], name='botevent_ip_created_idx'), models.Index(fields=['request_path', 'attack_attempted'], name='botevent_path_attack_idx'), models.Index(fields=['ip_address', 'request_path'], name='botevent_ip_path_idx')],
+                "indexes": [
+                    models.Index(
+                        fields=["attack_attempted", "method"],
+                        name="botevent_attack_method_idx",
+                    ),
+                    models.Index(
+                        fields=["attack_attempted", "method", "request_path"],
+                        name="botevent_atk_meth_path_idx",
+                    ),
+                    models.Index(
+                        fields=["ip_address", "created_at"],
+                        name="botevent_ip_created_idx",
+                    ),
+                    models.Index(
+                        fields=["request_path", "attack_attempted"],
+                        name="botevent_path_attack_idx",
+                    ),
+                    models.Index(
+                        fields=["ip_address", "request_path"],
+                        name="botevent_ip_path_idx",
+                    ),
+                ],
             },
         ),
         migrations.CreateModel(
-            name='AttackType',
+            name="AttackType",
             fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('target_field', models.CharField(max_length=200)),
-                ('pattern', models.CharField(max_length=100)),
-                ('category', models.CharField(choices=[('XSS', 'Cross-Site Scripting'), ('SQLI', 'SQL Injection'), ('LFI', 'Local File Inclusion'), ('CMD', 'Command Injection'), ('TRAVERSAL', 'Directory Traversal'), ('SSTI', 'Template Injection'), ('OTHER', 'Other')], db_index=True, max_length=50, verbose_name='Attack Type')),
-                ('raw_value', models.TextField()),
-                ('full_value', models.TextField(default='')),
-                ('created_at', models.DateTimeField(auto_now_add=True, db_index=True)),
-                ('bot_event', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='attacks', to='myapp.botevent')),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
+                ),
+                ("target_field", models.CharField(max_length=200)),
+                ("pattern", models.CharField(max_length=100)),
+                (
+                    "category",
+                    models.CharField(
+                        choices=[
+                            ("XSS", "Cross-Site Scripting"),
+                            ("SQLI", "SQL Injection"),
+                            ("LFI", "Local File Inclusion"),
+                            ("CMD", "Command Injection"),
+                            ("TRAVERSAL", "Directory Traversal"),
+                            ("SSTI", "Template Injection"),
+                            ("OTHER", "Other"),
+                        ],
+                        db_index=True,
+                        max_length=50,
+                        verbose_name="Attack Type",
+                    ),
+                ),
+                ("raw_value", models.TextField()),
+                ("full_value", models.TextField(default="")),
+                ("created_at", models.DateTimeField(auto_now_add=True, db_index=True)),
+                (
+                    "bot_event",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="attacks",
+                        to="myapp.botevent",
+                    ),
+                ),
             ],
             options={
-                'indexes': [models.Index(fields=['bot_event', 'category'], name='attacktype_be_cat_idx'), models.Index(fields=['category', 'created_at'], name='attacktype_cat_created_idx')],
+                "indexes": [
+                    models.Index(
+                        fields=["bot_event", "category"], name="attacktype_be_cat_idx"
+                    ),
+                    models.Index(
+                        fields=["category", "created_at"],
+                        name="attacktype_cat_created_idx",
+                    ),
+                ],
             },
         ),
     ]

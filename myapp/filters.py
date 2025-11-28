@@ -93,15 +93,20 @@ class BotEventFilter(filters.FilterSet):
         help_text="Filter by attack categories. Can select multiple categories.",
     )
 
-    # Custom bundled filters
-    spam_bot = filters.BooleanFilter(
-        method="filter_spam_bot",
-        help_text="Filter for spam bots: attack_attempted=False, method=POST, data__isnull=False. Set to true to show only spam bots.",
-    )
-    scan_bot = filters.BooleanFilter(
-        method="filter_scan_bot",
-        help_text="Filter for scan bots: attack_attempted=False, method=GET, (data__isnull=True OR data={}). Set to true to show only scan bots.",
-    )
+    def filter_event_category(self, queryset, name, value):
+        """Case-insensitive filter for event_category."""
+        if value:
+            # Normalize the value to lowercase to match the database values
+            value_lower = value.lower()
+            # Map common variations to actual choice values
+            category_map = {
+                "scan": BotEvent.EventCategory.SCAN,
+                "spam": BotEvent.EventCategory.SPAM,
+                "attack": BotEvent.EventCategory.ATTACK,
+            }
+            if value_lower in category_map:
+                return queryset.filter(event_category=category_map[value_lower])
+        return queryset
 
     def filter_spam_bot(self, queryset, name, value):
         """Filter for spam bots: attack_attempted=False, method=POST, data__isnull=False"""
@@ -144,12 +149,12 @@ class BotEventFilter(filters.FilterSet):
             "language",
             "attack_attempted",
             "attack_categories",
-            "raw_attack_value",
-            "bot_data",
             "correlation_token",
             "exact_request_path",
-            "spam_bot",
-            "scan_bot",
+            "event_category",
+            # Note: spam_bot and scan_bot are custom filter methods (filter_spam_bot, filter_scan_bot)
+            # They are automatically available as filters but should not be in Meta.fields
+            # since they are not actual model fields
         ]
 
 
@@ -157,7 +162,7 @@ class AttackTypeFilter(filters.FilterSet):
     """Custom filterset for AttackType with advanced filtering options."""
 
     # Exact filters
-    category = filters.ChoiceFilter(  # linked from snapshot view
+    attack_categories = filters.ChoiceFilter(  # linked from snapshot view
         field_name="category", choices=AttackType.AttackCategory.choices
     )
     pattern = filters.CharFilter(field_name="pattern", lookup_expr="exact")
@@ -181,7 +186,7 @@ class AttackTypeFilter(filters.FilterSet):
     class Meta:
         model = AttackType
         fields = [
-            "category",
+            "attack_categories",
             "pattern",
             "target_field",
             "raw_value",

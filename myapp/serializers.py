@@ -95,6 +95,9 @@ class PathAnalyticsSerializer(serializers.Serializer):
     most_popular_attack = serializers.CharField(
         allow_null=True
     )  # AttackTypeList filter on category
+    attacks_used = serializers.ListField(
+        child=serializers.CharField(), allow_null=True, allow_empty=True
+    )
 
 
 ##### IP Analytics Serializers #####
@@ -219,6 +222,7 @@ class BotEventListSerializer(serializers.ModelSerializer):
             "attack_categories",  # AttackTypeList filter on category
             "attack_attempted",
             "geo_location",
+            "event_category",
         ]
         read_only_fields = fields
 
