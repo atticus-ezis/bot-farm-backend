@@ -425,6 +425,7 @@ class HoneypotView(APIView):
             params = request.data if hasattr(request, "data") and request.data else {}
 
         meta_data = extract_meta_data(request.META)
+        # Use extract_email_from_payload which handles QueryDict lists, validates format, and checks multiple fields
         email = extract_email_from_payload(params)
 
         # Optimize: Collect all attacks and use bulk_create instead of individual creates
@@ -505,6 +506,7 @@ class HoneypotView(APIView):
             <form id='hp' method='POST'>
                 <input type="hidden" name="ctoken" value="{ctoken}">
                 <input name="username">
+                <input name="email">
                 <input name="message">
                 <input name="comment">
                 <textarea name="content"></textarea>
