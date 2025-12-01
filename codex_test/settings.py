@@ -11,7 +11,6 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
-import os
 import environ
 import dj_database_url
 
@@ -20,17 +19,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ENV Setup
 env = environ.Env()
-# Determine which env file to use based on environment variable or default to production in Docker
-# docker-compose-prod.yml sets env_file, but we also read from file for local development
-use_production = os.getenv("DJANGO_ENV") == "production" or os.path.exists(
-    "/.dockerenv"
-)
-production_env = os.path.join(BASE_DIR / ".envs" / ".production" / ".env")
-local_env = os.path.join(BASE_DIR / ".envs" / ".local" / ".env")
 
-if use_production and os.path.exists(production_env):
-    environ.Env.read_env(production_env)
-elif os.path.exists(local_env):
+local_env = BASE_DIR / ".envs" / ".local" / ".env"
+
+if local_env.exists():
     environ.Env.read_env(local_env)
 
 
@@ -46,6 +38,9 @@ SECRET_KEY = env.str(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool("DJANGO_DEBUG", default=False)
 
+# Allow Render domains and custom domains
+# Note: Set DJANGO_ALLOWED_HOSTS in Render dashboard with your actual domain
+# Example: your-app.onrender.com,www.your-app.onrender.com
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
 CSRF_TRUSTED_ORIGINS = env.list("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])
@@ -103,12 +98,15 @@ WSGI_APPLICATION = "codex_test.wsgi.application"
 # Check for DB_URL first and use dj-database-url to parse it
 db_url = env.str("DB_URL", default="")
 if db_url:
+    # Parse database URL with SSL requirements for Supabase/cloud databases
+    db_config = dj_database_url.parse(db_url, conn_max_age=600)
+    # Add SSL requirement if using Supabase or other cloud providers
+    if "supabase.com" in db_url or "pooler.supabase.com" in db_url:
+        db_config["OPTIONS"] = {
+            "sslmode": "require",
+        }
     DATABASES = {
-        "default": dj_database_url.parse(db_url, conn_max_age=600),
-    }
-elif env.str("POSTGRES_DB_URL", default=""):
-    DATABASES = {
-        "default": env.db("POSTGRES_DB_URL"),
+        "default": db_config,
     }
 else:
     DATABASES = {
