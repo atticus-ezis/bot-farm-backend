@@ -1,30 +1,29 @@
 #!/usr/bin/env bash
 set -e
 
-# Ensure script is executable (in case volume mount lost permissions)
-chmod +x /app/entrypoint.sh 2>/dev/null || true
+# Optional: print a header
+echo ">>> entrypoint: starting (pid $$)"
 
-# Wait for database to be ready
-echo "Waiting for database to be ready..."
-until pg_isready -h "${DB_HOST:-db}" -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" > /dev/null 2>&1; do
-  echo "Database is unavailable - sleeping"
-  sleep 1
-done
-echo "Database is ready!"
+# Set defaults
+APP_HOME="${APP_HOME:-/app}"
+VENV_PATH="${VENV_PATH:-${APP_HOME}/.venv}"
 
-# Run migrations
-python manage.py migrate --noinput
-
-# Run tests if RUN_TESTS environment variable is set
-if [ "${RUN_TESTS:-false}" = "true" ]; then
-    echo "Running tests..."
-    pytest myapp/tests/ -v
-    TEST_EXIT_CODE=$?
-    if [ $TEST_EXIT_CODE -ne 0 ]; then
-        echo "Tests failed with exit code $TEST_EXIT_CODE"
-        exit $TEST_EXIT_CODE
-    fi
-    echo "All tests passed!"
+# Run migrations (only if enabled)
+if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
+  echo ">>> entrypoint: running migrations"
+  # Use python from PATH (which includes venv/bin if set correctly)
+  python manage.py migrate --noinput || {
+    echo ">>> WARNING: Migrations failed, continuing anyway"
+  }
 fi
 
-exec "$@"
+# Finally exec the CMD (this becomes PID 1)
+# If CMD is provided, use it; otherwise use default gunicorn command
+if [ $# -eq 0 ]; then
+  echo ">>> entrypoint: no CMD provided, using default gunicorn"
+  exec gunicorn codex_test.wsgi:application --bind "0.0.0.0:${PORT:-10000}" --workers 3
+else
+  echo ">>> entrypoint: exec: $@"
+  exec "$@"
+fi
+
