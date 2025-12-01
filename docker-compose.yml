@@ -26,15 +26,14 @@ services:
       - ./.envs/.local/.env
     environment:
       - DB_HOST=db
-      - RUN_TESTS=true
+      - PORT=8000
+      - RUN_MIGRATIONS=true
 
     entrypoint: ["/app/entrypoint.sh"]
 
     volumes:
       - .:/app
       - venv_cache:/app/.venv
-
-    command: ["gunicorn", "codex_test.wsgi:application", "--bind", "0.0.0.0:8000"]
 
     ports:
       - "8000:8000"
