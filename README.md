@@ -2,6 +2,9 @@
 
 A Django REST Framework API for tracking and analyzing bot submissions, honeypot interactions, and attack attempts. This backend powers the bot analytics dashboard by providing comprehensive endpoints for data ingestion, analytics, and administration.
 
+Domain (API only): https://botevents-prod-v4.onrender.com/
+Deployed to Render with Docker
+
 ## Tech Stack
 
 - **Django 5.2** - Web framework
@@ -46,7 +49,9 @@ backend/
 ## Models
 
 ### BotEvent
+
 Tracks individual bot interactions with the system:
+
 - **IP Address & Geo-location** - Source tracking
 - **Request Metadata** - Method, path, headers, referer, origin
 - **Email Extraction** - Automatically extracted from payloads
@@ -56,7 +61,9 @@ Tracks individual bot interactions with the system:
 - **Target Fields** - ArrayField for tracking which fields were targeted
 
 ### AttackType
+
 Records detected attack attempts:
+
 - **Attack Categories** - XSS, SQLI, LFI, CMD, TRAVERSAL, SSTI, OTHER
 - **Pattern Matching** - Specific attack pattern detected
 - **Target Field** - Which input field triggered the detection
@@ -67,19 +74,25 @@ Records detected attack attempts:
 ### Public Endpoints
 
 #### `GET /api/snapshot/`
+
 Returns summary analytics for the dashboard:
+
 - Total events, injection attempts, unique IPs
 - Top 3 attack categories
 - Top 3 request paths
 
 #### `GET /api/aggregate-paths/`
+
 Path analytics with aggregation:
+
 - Traffic counts per path
 - Breakdown by event category (scan/spam/attack)
 - Filtering, searching, and ordering support
 
 #### `POST /api/contact-bot/`
+
 Honeypot endpoint for bot submissions:
+
 - Accepts form data (including hidden honeypot fields)
 - Rate limiting by IP address
 - Automatic attack detection
@@ -91,34 +104,44 @@ Honeypot endpoint for bot submissions:
 All endpoints below require authentication (Basic Auth or Session Auth).
 
 #### `GET /api/bot-events/`
+
 List all bot events with:
+
 - Pagination (25 per page)
 - Filtering by IP, path, category, attack status, method
 - Search across multiple fields
 - Ordering by various fields
 
 #### `GET /api/bot-events/{id}/`
+
 Retrieve detailed bot event information
 
 #### `GET /api/aggregate-ips/`
+
 IP analytics with aggregation:
+
 - Traffic and email counts per IP
 - Attack and event category breakdowns
 - Unified search across IP, referer, and email
 - Filtering and ordering support
 
 #### `GET /api/aggregate-ips/{id}/`
+
 Detailed IP analytics with:
+
 - All associated bot events
 - Attack history
 - Timeline information
 
 #### `GET /api/attacks/`
+
 List all detected attacks:
+
 - Filtering by category, bot event, target field
 - Search and ordering support
 
 #### `GET /api/attacks/{id}/`
+
 Retrieve detailed attack information
 
 ### API Documentation
@@ -195,6 +218,7 @@ docker-compose up --build
 ```
 
 This will:
+
 - Start PostgreSQL database
 - Run migrations automatically
 - Start Django with Gunicorn on port 8000
@@ -232,6 +256,7 @@ This will:
 ### Attack Detection
 
 The system automatically detects various attack patterns:
+
 - **XSS (Cross-Site Scripting)** - Script injection attempts
 - **SQLI (SQL Injection)** - Database injection attempts
 - **LFI (Local File Inclusion)** - File inclusion attacks
@@ -245,6 +270,7 @@ Detection happens automatically when data is submitted to `/api/contact-bot/`.
 ### Event Categorization
 
 Bot events are automatically categorized:
+
 - **SCAN** - GET requests without data (reconnaissance)
 - **SPAM** - POST requests with data but no attacks
 - **ATTACK** - Requests containing detected attack patterns
@@ -252,6 +278,7 @@ Bot events are automatically categorized:
 ### Email Extraction
 
 The system automatically extracts email addresses from:
+
 - Common email fields (`email`, `contact_email`, etc.)
 - Message/body fields (searches for embedded emails)
 - Uses regex pattern matching
@@ -263,6 +290,7 @@ The honeypot endpoint (`/api/contact-bot/`) includes IP-based rate limiting to p
 ### Filtering & Search
 
 All list endpoints support:
+
 - **Django Filter** - Field-based filtering
 - **Search** - Full-text search across relevant fields
 - **Ordering** - Sort by any orderable field
@@ -308,6 +336,7 @@ pytest
 ```
 
 Test files are located in `myapp/tests/`:
+
 - `test_views.py` - View and endpoint tests
 - `test_honeypot_view.py` - Honeypot endpoint tests
 - `test_utils.py` - Utility function tests
@@ -319,6 +348,7 @@ Test files are located in `myapp/tests/`:
 ### PostgreSQL Features
 
 The project uses PostgreSQL-specific features:
+
 - **ArrayField** - For storing arrays of strings (target fields)
 - **JSONField** - For flexible data storage
 - **Composite Indexes** - Optimized for common query patterns
@@ -414,6 +444,7 @@ For browser-based access, use Django's session authentication (login via `/admin
 ### Rate Limiting
 
 If honeypot endpoint is rate limiting too aggressively:
+
 - Adjust `CONTACT_BOT_RATE_LIMIT` environment variable
 - Or disable rate limiting in the view code
 
@@ -426,4 +457,3 @@ If honeypot endpoint is rate limiting too aggressively:
 ## License
 
 See main project README for license information.
-
