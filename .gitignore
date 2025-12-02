@@ -29,3 +29,5 @@ wheels/
 *.env
 
 /frontend/*
+
+NOTES.md
