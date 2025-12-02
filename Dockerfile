@@ -34,10 +34,6 @@
       --mount=type=bind,source=uv.lock,target=uv.lock:rw \
       uv sync
   
-  # Ensure static files are collected using venv python (avoid system python)
-  RUN [ -x "${VENV_PATH}/bin/python" ] && \
-      ${VENV_PATH}/bin/python manage.py collectstatic --noinput || true
-  
 # -------------------------
 # Runtime stage
 # -------------------------
