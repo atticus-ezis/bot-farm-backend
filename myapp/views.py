@@ -5,6 +5,7 @@ from rest_framework import status, viewsets
 from rest_framework.permissions import AllowAny
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
+from django.shortcuts import render
 from uuid import uuid4
 from .filters import (
     BotEventFilter,
@@ -499,26 +500,11 @@ class HoneypotView(APIView):
         ctoken = uuid4()
 
         self._log_event(request, "GET", ctoken)
+        context = {
+            "ctoken": ctoken,
+        }
 
-        html = f"""
-        <html><body>
-            <h3>Loading...</h3>
-            <form id='hp' method='POST'>
-                <input type="hidden" name="ctoken" value="{ctoken}">
-                <input name="username">
-                <input name="email">
-                <input name="message">
-                <input name="comment">
-                <textarea name="content"></textarea>
-                <button type="submit">Submit</button>
-            </form>
-            <script>
-            setTimeout(() => document.getElementById('hp').submit(), 300);
-            </script>
-        </body></html>
-        """
-
-        return Response(html, content_type="text/html", status=200)
+        return render(request, "fake_form.html", context)
 
     #
     # POST → logs XSS in posted form data, correlates via ctoken
@@ -532,7 +518,9 @@ class HoneypotView(APIView):
 
         self._log_event(request, "POST", ctoken)
 
-        return Response({"status": "ok"}, status=status.HTTP_200_OK)
+        return Response(
+            {"status": "Permission denied"}, status=status.HTTP_403_FORBIDDEN
+        )
 
     def put(self, request, *args, **kwargs):
         """Handle PUT requests - log as scan/reconnaissance."""

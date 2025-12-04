@@ -207,6 +207,7 @@ class BotEventListSerializer(serializers.ModelSerializer):
             "attack_attempted",
             "geo_location",
             "event_category",
+            "target_fields",
         ]
         read_only_fields = fields
 

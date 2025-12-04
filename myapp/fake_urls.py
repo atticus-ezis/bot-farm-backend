@@ -38,7 +38,7 @@ FAKE_URLS = [
     "test/",
     "dev/",
     "admin-login/",
-    "cp/",  # control panel
+    "cp/",
     "dashboard/login/",
     "adminpanel/",
     "search/",
