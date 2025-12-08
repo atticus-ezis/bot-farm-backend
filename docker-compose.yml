@@ -29,7 +29,8 @@ services:
       - PORT=8000
       - RUN_MIGRATIONS=true
 
-    entrypoint: ["/app/entrypoint.sh"]
+    # entrypoint and CMD are defined in Dockerfile
+    # entrypoint: ["/app/entrypoint.sh"]
 
     volumes:
       - .:/app

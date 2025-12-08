@@ -11,10 +11,16 @@ VENV_PATH="${VENV_PATH:-${APP_HOME}/.venv}"
 # Run migrations (only if enabled)
 if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
   echo ">>> entrypoint: running migrations"
-  # Use python from PATH (which includes venv/bin if set correctly)
-  python manage.py migrate --noinput || {
-    echo ">>> WARNING: Migrations failed, continuing anyway"
-  }
+  # Use python from venv if it exists, otherwise use system python
+  if [ -f "${VENV_PATH}/bin/python" ]; then
+    "${VENV_PATH}/bin/python" manage.py migrate --noinput || {
+      echo ">>> WARNING: Migrations failed, continuing anyway"
+    }
+  else
+    python manage.py migrate --noinput || {
+      echo ">>> WARNING: Migrations failed, continuing anyway"
+    }
+  fi
 fi
 
 # Finally exec the CMD (this becomes PID 1)

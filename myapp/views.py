@@ -518,9 +518,7 @@ class HoneypotView(APIView):
 
         self._log_event(request, "POST", ctoken)
 
-        return Response(
-            {"status": "Permission denied"}, status=status.HTTP_403_FORBIDDEN
-        )
+        return Response({"status": "ok"}, status=status.HTTP_200_OK)
 
     def put(self, request, *args, **kwargs):
         """Handle PUT requests - log as scan/reconnaissance."""
