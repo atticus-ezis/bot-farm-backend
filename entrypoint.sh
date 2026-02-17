@@ -23,6 +23,20 @@ if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
   fi
 fi
 
+# Load fixture (only if enabled and file exists)
+if [ "${RUN_LOADDATA:-true}" = "true" ] && [ -f "${APP_HOME}/data-snapshot.json" ]; then
+  echo ">>> entrypoint: loading data-snapshot.json"
+  if [ -f "${VENV_PATH}/bin/python" ]; then
+    "${VENV_PATH}/bin/python" manage.py loaddata data-snapshot.json || {
+      echo ">>> WARNING: loaddata failed (e.g. duplicate keys if DB already has data), continuing anyway"
+    }
+  else
+    python manage.py loaddata data-snapshot.json || {
+      echo ">>> WARNING: loaddata failed (e.g. duplicate keys if DB already has data), continuing anyway"
+    }
+  fi
+fi
+
 # Finally exec the CMD (this becomes PID 1)
 # If CMD is provided, use it; otherwise use default gunicorn command
 if [ $# -eq 0 ]; then
