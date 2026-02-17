@@ -93,29 +93,15 @@ WSGI_APPLICATION = "codex_test.wsgi.application"
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 # Check for DB_URL first and use dj-database-url to parse it
-db_url = env.str("DB_URL", default="")
-if db_url:
-    # Parse database URL with SSL requirements for Supabase/cloud databases
-    db_config = dj_database_url.parse(db_url, conn_max_age=600)
-    # Add SSL requirement if using Supabase or other cloud providers
-    if "supabase.com" in db_url or "pooler.supabase.com" in db_url:
-        db_config["OPTIONS"] = {
-            "sslmode": "require",
-        }
-    DATABASES = {
-        "default": db_config,
+DATABASES = {
+    # "default": dj_database_url.config(
+    #     default=env.str("DB_URL", default=""),
+    # ),
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
     }
-else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": env.str("POSTGRES_DB", default=""),
-            "USER": env.str("POSTGRES_USER", default=""),
-            "PASSWORD": env.str("POSTGRES_PASSWORD", default=""),
-            "HOST": env.str("DB_HOST", default="127.0.0.1"),
-            "PORT": "5432",
-        }
-    }
+}
 
 
 # Password validation

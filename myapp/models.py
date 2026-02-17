@@ -1,7 +1,6 @@
 # myapp/models.py
 import uuid
 from django.db import models
-from django.contrib.postgres.fields import ArrayField
 
 
 class BotEvent(models.Model):
@@ -54,7 +53,12 @@ class BotEvent(models.Model):
     )
     data_present = models.BooleanField(default=False, db_index=True)
     field_count = models.IntegerField(default=0)
-    target_fields = ArrayField(models.CharField(max_length=200), null=True, blank=True)
+    target_fields = models.JSONField(
+        default=list,
+        null=True,
+        blank=True,
+        help_text="List of field names (stored as JSON for SQLite compatibility)",
+    )
     data_details = models.JSONField(null=True, blank=True)
 
     class Meta:
