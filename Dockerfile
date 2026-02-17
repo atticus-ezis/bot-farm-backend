@@ -71,5 +71,5 @@
   # Use an entrypoint script to run migrations/wait-for-db if desired/ run guinicorn
   # CMD is handled by entrypoint.sh which will use default gunicorn if no CMD provided
   ENTRYPOINT ["/app/entrypoint.sh"]
-  CMD ["gunicorn", "codex_test.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3"]
+  CMD ["gunicorn", "codex_test.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "120"]
   

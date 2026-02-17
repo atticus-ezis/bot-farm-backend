@@ -41,7 +41,9 @@ DEBUG = env.bool("DJANGO_DEBUG", default=False)
 # Allow Render domains and custom domains
 # Note: Set DJANGO_ALLOWED_HOSTS in Render dashboard with your actual domain
 # Example: your-app.onrender.com,www.your-app.onrender.com
-ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
+ALLOWED_HOSTS = env.list(
+    "DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1", "0.0.0.0"]
+)
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -91,11 +93,7 @@ WSGI_APPLICATION = "codex_test.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-# Check for DB_URL first and use dj-database-url to parse it
 DATABASES = {
-    # "default": dj_database_url.config(
-    #     default=env.str("DB_URL", default=""),
-    # ),
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",

@@ -31,6 +31,7 @@ def health_check(request):
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", health_check),
+    path("health/", health_check),  # Explicit health check endpoint
     path("", include("myapp.urls")),
 ]
 

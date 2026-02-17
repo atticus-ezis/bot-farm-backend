@@ -41,7 +41,11 @@ fi
 # If CMD is provided, use it; otherwise use default gunicorn command
 if [ $# -eq 0 ]; then
   echo ">>> entrypoint: no CMD provided, using default gunicorn"
-  exec gunicorn codex_test.wsgi:application --bind "0.0.0.0:${PORT:-10000}" --workers 3
+  exec gunicorn codex_test.wsgi:application \
+    --bind "0.0.0.0:${PORT:-10000}" \
+    --workers 3 \
+    --timeout 120 \
+    --graceful-timeout 30
 else
   echo ">>> entrypoint: exec: $@"
   exec "$@"
