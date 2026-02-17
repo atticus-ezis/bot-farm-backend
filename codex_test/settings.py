@@ -54,7 +54,6 @@ INSTALLED_APPS = [
     "rest_framework",
     "corsheaders",
     "myapp",
-    "django.contrib.postgres",
     "drf_yasg",
     "django_filters",
 ]

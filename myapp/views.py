@@ -29,8 +29,8 @@ from .serializers import (
     AttackTypeDetailSerializer,
     AttackTypeListSerializer,
 )
-from django.db.models import Count, Q, Subquery, OuterRef, Max
-from django.contrib.postgres.aggregates import ArrayAgg
+from django.db.models import Count, Q, Subquery, OuterRef, Max, Case, When, F, Value
+from .aggregates import ListAgg
 
 
 class SnapShotView(APIView):
@@ -111,10 +111,11 @@ class AggregatePathList(generics.ListAPIView):
                 "id", filter=Q(event_category=BotEvent.EventCategory.ATTACK)
             ),
             created_at=Max("created_at"),  # Most recent event per path,
-            attacks_used=ArrayAgg(
-                "attacks__category",
-                distinct=True,
-                filter=Q(attack_attempted=True),
+            attacks_used=ListAgg(
+                Case(
+                    When(attack_attempted=True, then=F("attacks__category")),
+                    default=Value(None)
+                )
             ),
             most_popular_attack=Subquery(
                 AttackType.objects.filter(
@@ -188,12 +189,11 @@ class AggregateIPViewSet(viewsets.ReadOnlyModelViewSet):
             attack_count=Count(
                 "id", filter=Q(event_category=BotEvent.EventCategory.ATTACK)
             ),
-            attack_categories=ArrayAgg(
-                "attacks__category",
-                distinct=True,
-                filter=Q(
-                    attacks__category__isnull=False,
-                ),
+            attack_categories=ListAgg(
+                Case(
+                    When(attacks__category__isnull=False, then=F("attacks__category")),
+                    default=Value(None)
+                )
             ),
             referer=Subquery(
                 BotEvent.objects.filter(ip_address=OuterRef("ip_address"))
@@ -201,10 +201,11 @@ class AggregateIPViewSet(viewsets.ReadOnlyModelViewSet):
                 .values("referer")[:1]
                 .values_list("referer", flat=True)
             ),
-            emails_used=ArrayAgg(
-                "email",
-                distinct=True,
-                filter=Q(email__isnull=False),
+            emails_used=ListAgg(
+                Case(
+                    When(email__isnull=False, then=F("email")),
+                    default=Value(None)
+                )
             ),
             email_count=Count("email", filter=Q(email__isnull=False)),
             agent=Subquery(
@@ -355,10 +356,11 @@ class BotEventViewSet(viewsets.ReadOnlyModelViewSet):
         queryset = queryset.annotate(attack_count=Count("attacks"))
         # get attack categories
         queryset = queryset.annotate(
-            attack_categories=ArrayAgg(
-                "attacks__category",
-                distinct=True,
-                filter=Q(attack_attempted=True),
+            attack_categories=ListAgg(
+                Case(
+                    When(attack_attempted=True, then=F("attacks__category")),
+                    default=Value(None)
+                )
             )
         )
 

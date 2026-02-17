@@ -1,6 +1,20 @@
 # myapp/serializers.py
 from rest_framework import serializers
 from .models import BotEvent, AttackType
+from .aggregates import LISTAGG_DELIMITER
+
+
+def normalize_listagg(value):
+    """
+    Convert ListAgg output (delimiter-separated string) to a list.
+    Handles both string (from SQLite ListAgg) and list (from Postgres ArrayAgg).
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        # Split by delimiter and filter empty strings
+        return [x for x in value.split(LISTAGG_DELIMITER) if x]
+    return value if isinstance(value, list) else []
 
 
 ##### Attack Serializers (defined first to avoid circular dependencies) #####
@@ -79,9 +93,11 @@ class PathAnalyticsSerializer(serializers.Serializer):
     most_popular_attack = serializers.CharField(
         allow_null=True
     )  # AttackTypeList filter on category
-    attacks_used = serializers.ListField(
-        child=serializers.CharField(), allow_null=True, allow_empty=True
-    )
+    attacks_used = serializers.SerializerMethodField()
+
+    def get_attacks_used(self, obj):
+        """Normalize ListAgg output to list."""
+        return normalize_listagg(getattr(obj, 'attacks_used', None))
 
 
 ##### IP Analytics Serializers #####
@@ -101,9 +117,11 @@ class IPAnalyticsListSerializer(serializers.Serializer):
     spam_count = serializers.IntegerField(
         allow_null=True
     )  # BotEventList spam_bot = True
-    attack_categories = serializers.ListField(
-        child=serializers.CharField(), allow_null=True, allow_empty=True
-    )
+    attack_categories = serializers.SerializerMethodField()
+
+    def get_attack_categories(self, obj):
+        """Normalize ListAgg output to list."""
+        return normalize_listagg(getattr(obj, 'attack_categories', None))
     email_count = serializers.IntegerField(allow_null=True)
     created_at = serializers.DateTimeField(allow_null=True)
     geo_location = serializers.CharField(allow_null=True)
@@ -135,12 +153,11 @@ class IPAnalyticsDetailSerializer(serializers.Serializer):
         allow_null=True
     )  # AttackTypeList filter on ip_address
     referer = serializers.CharField(allow_null=True)
-    email = serializers.ListField(
-        child=serializers.EmailField(),
-        allow_null=True,
-        allow_empty=True,
-        source="emails_used",
-    )
+    email = serializers.SerializerMethodField()
+
+    def get_email(self, obj):
+        """Normalize ListAgg output to list."""
+        return normalize_listagg(getattr(obj, 'emails_used', None))
     email_count = serializers.IntegerField(allow_null=True)
     agent = serializers.CharField(allow_null=True)
     language = serializers.CharField(allow_null=True)
@@ -156,7 +173,9 @@ class BotEventDetailSerializer(serializers.ModelSerializer):
     attack_count = serializers.SerializerMethodField()
 
     def get_attack_categories(self, obj):
-        """Get list of unique attack categories."""
+        """Get list of unique attack categories (or normalize from annotation)."""
+        if hasattr(obj, "attack_categories"):
+            return normalize_listagg(obj.attack_categories)
         return list(obj.attacks.values_list("category", flat=True).distinct())
 
     def get_attack_count(self, obj):
@@ -224,7 +243,7 @@ class BotEventListSerializer(serializers.ModelSerializer):
         return obj.attacks.count()
 
     def get_attack_categories(self, obj):
-        """Get list of unique attack categories."""
+        """Get list of unique attack categories (or normalize from annotation)."""
         if hasattr(obj, "attack_categories"):
-            return obj.attack_categories or []
+            return normalize_listagg(obj.attack_categories)
         return list(obj.attacks.values_list("category", flat=True).distinct())

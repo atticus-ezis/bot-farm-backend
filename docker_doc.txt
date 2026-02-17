@@ -1,3 +1,10 @@
+DOCKER IMAGES:
+for postgresql url use:
+atticusezis/botevent-prod:v9amd64
+
+for locally saved data (sqlite):
+use latest
+
 
 docker - 
     compose build
